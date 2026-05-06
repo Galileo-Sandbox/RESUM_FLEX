@@ -183,7 +183,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
 
 ### Phase 3 — CNP
-- [ ] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
+- [x] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
 - [ ] `feat(core): mixup augmentation` — α from config, addresses 1:5·10⁴ class imbalance
 - [ ] `feat: training loop & checkpoint format`
 - [ ] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
