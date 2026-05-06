@@ -155,22 +155,23 @@ def plot_S6(out: Path) -> None:
 
 
 def plot_S7(out: Path) -> None:
-    """1D θ DESIGN_ONLY. Line + per-trial empirical rate scatter."""
+    """1D θ DESIGN_ONLY. Line + raw per-event scatter."""
     gen = for_scenario("S7", seed=0)
     grid = _grid_1d()
     p = gen.truth.evaluate(theta=grid[:, None], phi=None)  # (G,)
     batch = gen.generate(n_trials=N_TRIALS, n_events=N_EVENTS)
     assert batch.theta is not None
-    rate = batch.labels.mean(axis=1)  # (B,)
-    overlay = (batch.theta[:, 0], rate)
+    # Raw event dots: (trial's θ, individual X_i) — one dot per event.
+    raw_theta = np.repeat(batch.theta[:, 0], N_EVENTS)
+    raw_x = batch.labels.flatten().astype(float)
     plot_field(
         p, [grid],
         out_path=out,
-        title=f"S7 — DESIGN_ONLY, dim(θ)=1  (per-trial empirical rate overlay, N={N_EVENTS})",
+        title="S7 — DESIGN_ONLY, dim(θ)=1  (raw events overlay)",
         axis_labels=["θ"],
         value_label="t(θ)",
-        overlay_xy=overlay,
-        overlay_label=f"empirical rate (per trial, N={N_EVENTS})",
+        overlay_xy=(raw_theta, raw_x),
+        overlay_label="X (raw, per event)",
     )
 
 
@@ -188,10 +189,50 @@ def plot_S8(out: Path) -> None:
     )
 
 
+def _plot_theta_1d_marginal(
+    name: str, gen, out: Path, *, n_trials: int = N_TRIALS, n_events: int = N_EVENTS
+) -> None:
+    """Marginal-θ plot for FULL-mode scenarios with dim(θ)=1 (S1, S3).
+
+    Analytical curve is ``p̄(θ) = ∫ p(θ, φ) g(φ) dφ`` estimated by MC over
+    a uniform φ grid. Dots are raw per-event (θ_k, X_ki) — one dot per
+    event, never an aggregate.
+    """
+    grid = _grid_1d()
+    G = grid.shape[0]
+    rng = np.random.default_rng(11)
+    n_phi_mc = 200
+    phi_mc = rng.uniform(-1.0, 1.0, size=(G, n_phi_mc, gen.dim_phi))
+    theta_per_event = grid[:, None, None]  # [G, 1, 1]
+    p_at_phi = gen.truth.evaluate(theta=theta_per_event, phi=phi_mc)  # [G, n_phi_mc]
+    p_curve = p_at_phi.mean(axis=1)
+
+    batch = gen.generate(n_trials=n_trials, n_events=n_events)
+    assert batch.theta is not None
+    raw_theta = np.repeat(batch.theta[:, 0], n_events)
+    raw_x = batch.labels.flatten().astype(float)
+
+    plot_field(
+        p_curve, [grid],
+        out_path=out,
+        title=(
+            f"{name} — θ-projection (marginal over φ ~ U[-1,1]^{gen.dim_phi}); "
+            f"raw events overlay"
+        ),
+        axis_labels=["θ"],
+        value_label="t̄(θ)",
+        overlay_xy=(raw_theta, raw_x),
+        overlay_label="X (raw, per event)",
+    )
+
+
 PLOTTERS = {
     "S1": plot_S1, "S2": plot_S2, "S3": plot_S3, "S4": plot_S4,
     "S5": plot_S5, "S6": plot_S6, "S7": plot_S7, "S8": plot_S8,
 }
+
+# Scenarios with dim(θ)=1 whose main plot is 2D; add a θ-projection too.
+THETA_1D_EXTRA_FOR = {"S1", "S3"}
 
 
 def main() -> None:
@@ -200,6 +241,10 @@ def main() -> None:
         out = OUT_DIR / f"pseudo_ground_truth_{name}.png"
         fn(out)
         print(f"  wrote {out}")
+        if name in THETA_1D_EXTRA_FOR:
+            extra = OUT_DIR / f"pseudo_ground_truth_{name}_theta.png"
+            _plot_theta_1d_marginal(name, for_scenario(name, seed=0), extra)
+            print(f"  wrote {extra}")
 
 
 if __name__ == "__main__":

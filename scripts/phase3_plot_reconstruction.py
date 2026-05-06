@@ -189,13 +189,15 @@ def plot_S7(out: Path) -> None:
     tgt = StandardBatch(mode=InputMode.DESIGN_ONLY, theta=theta, labels=tgt_labels)
     beta = _predict_at(cnp, ctx, tgt)[:, 0]   # [G]
 
-    rate = ctx.labels.mean(axis=1)
-    overlay = (theta[:, 0], rate)
+    # Raw event dots: one per (trial, event_index_in_trial).
+    raw_theta = np.repeat(theta[:, 0], N_CTX)
+    raw_x = ctx.labels.flatten().astype(float)
     plot_comparison_1d(
         x=grid, analytical=p, predicted=beta, out_path=out,
-        title=f"S7 — DESIGN_ONLY, dim(θ)=1: analytical p vs predicted β (per-trial overlay, N={N_CTX})",
-        xlabel="θ", overlay_xy=overlay,
-        overlay_label=f"empirical rate per trial (N={N_CTX})",
+        title="S7 — DESIGN_ONLY, dim(θ)=1: analytical p vs predicted β",
+        xlabel="θ",
+        overlay_xy=(raw_theta, raw_x),
+        overlay_label="X (raw, per event)",
     )
 
 
@@ -366,6 +368,65 @@ PLOTTERS: dict[str, Callable[[Path], None]] = {
     "S5": plot_S5, "S6": plot_S6, "S7": plot_S7, "S8": plot_S8,
 }
 
+# Scenarios where dim(θ)=1 AND the main plot is 2D — these get an extra
+# 1-D θ-projection plot. S7 already shows θ as its main plot so it's
+# handled separately (we only fix its dot semantics there).
+THETA_1D_EXTRA_FOR = {"S1", "S3"}
+
+
+def _theta_marginal_predicted(
+    gen, cnp, theta_grid: np.ndarray, n_phi_mc: int = 200, seed: int = 11,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Predict the φ-marginalized ``β̄(θ)`` and analytical ``p̄(θ)``.
+
+    Used for FULL-mode scenarios when projecting onto θ. ``ctx`` is
+    returned alongside the curves so the caller can scatter the raw
+    binary X events at each trial's θ.
+    """
+    rng = np.random.default_rng(seed)
+    G = theta_grid.shape[0]
+    theta = theta_grid[:, None]                                 # [G, 1]
+    phi_mc = rng.uniform(-1.0, 1.0, size=(G, n_phi_mc, gen.dim_phi))
+
+    # Analytical p̄(θ) via MC over φ.
+    theta_per_event = theta[:, None, :]
+    p_at_phi = gen.truth.evaluate(theta=theta_per_event, phi=phi_mc)  # [G, n_phi_mc]
+    p_curve = p_at_phi.mean(axis=1)
+
+    # Predicted β̄(θ) via MC over φ for each θ.
+    ctx = _build_context_FULL(gen, theta=theta, n_ctx=N_CTX, seed=seed)
+    tgt_labels = np.zeros((G, n_phi_mc), dtype=np.int8)
+    tgt = StandardBatch(
+        mode=InputMode.FULL, theta=theta, phi=phi_mc, labels=tgt_labels
+    )
+    beta_at_phi = _predict_at(cnp, ctx, tgt)                    # [G, n_phi_mc]
+    beta_curve = beta_at_phi.mean(axis=1)
+    return p_curve, beta_curve, ctx
+
+
+def _plot_theta_1d_full(name: str, gen, cnp, out_path: Path) -> None:
+    """θ-marginal 1-D plot for FULL-mode scenarios (S1, S3)."""
+    theta_grid = _grid_1d()
+    p_curve, beta_curve, ctx = _theta_marginal_predicted(gen, cnp, theta_grid)
+
+    # Raw per-event dots: (θ_k, X_ki) — one dot per event in the context.
+    raw_theta = np.repeat(ctx.theta[:, 0], N_CTX)
+    raw_x = ctx.labels.flatten().astype(float)
+
+    plot_comparison_1d(
+        x=theta_grid,
+        analytical=p_curve,
+        predicted=beta_curve,
+        out_path=out_path,
+        title=(
+            f"{name} — θ-projection (analytical and predicted "
+            f"both marginalized over φ ~ U[-1,1]^{gen.dim_phi})"
+        ),
+        xlabel="θ",
+        overlay_xy=(raw_theta, raw_x),
+        overlay_label="X (raw, per event)",
+    )
+
 
 def main() -> None:
     OUT_DIR.mkdir(exist_ok=True)
@@ -374,6 +435,22 @@ def main() -> None:
         print(f"  training & plotting {name} ...")
         fn(out)
         print(f"  wrote {out}")
+        if name in THETA_1D_EXTRA_FOR:
+            # Re-train for the projection (cheap: ~1 s); deliberate to keep
+            # each plotter self-contained and reproducible from the same seed.
+            torch.manual_seed(0)
+            np.random.seed(0)
+            gen = for_scenario(name, seed=0)
+            cnp = build_cnp(_enc_cfg(), gen.dim_theta, gen.dim_phi)
+            train_cnp(
+                cnp, gen,
+                cnp_config=_cnp_cfg(),
+                training_config=_train_cfg(name),
+            )
+            cnp.eval()
+            extra = OUT_DIR / f"cnp_reconstruction_{name}_theta.png"
+            _plot_theta_1d_full(name, gen, cnp, extra)
+            print(f"  wrote {extra}")
 
 
 if __name__ == "__main__":
