@@ -151,8 +151,8 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 
 ### Phase 1 — Pseudo-data generator
 - [x] `feat(viz): dim-dispatch plotting utility` — viz/dispatch.py (1D line / 2D heatmap / ≥3 projection)
-- [ ] `feat(data): pseudo_generator with analytical t(θ,φ)` — data/pseudo_generator.py returns StandardBatch + ground-truth p
-- [ ] `test(data): generator covers all 8 scenarios` — shape, mode, Bernoulli round-trip
+- [x] `feat(data): pseudo_generator with analytical t(θ,φ)` — data/pseudo_generator.py returns StandardBatch + ground-truth p
+- [x] `test(data): generator covers all 8 scenarios` — shape, mode, Bernoulli round-trip
 - [ ] `chore: Phase 1 ground-truth plots` — viz_output/pseudo_ground_truth_S{1..8}.png
 
 ### Phase 2 — Universal encoder
