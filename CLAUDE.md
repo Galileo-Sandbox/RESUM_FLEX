@@ -184,9 +184,9 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 
 ### Phase 3 — CNP
 - [x] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
-- [ ] `feat(core): mixup augmentation` — α from config, addresses 1:5·10⁴ class imbalance
+- [~] `feat(core): mixup augmentation` — **DEFERRED until real LEGEND data** (see decision note below)
 - [x] `feat: training loop & checkpoint format`
-- [ ] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
+- [x] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
 - [ ] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
 
 ### Phase 4 — MFGP
@@ -203,6 +203,10 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 ### Cross-cutting
 - [ ] CI workflow (pytest + ruff)
 - [ ] User-facing README (separate from CLAUDE.md, which is the agent brief)
+
+### Deferred decisions
+
+- **Mixup augmentation** (originally Phase 3). Skipped on synthetic data because our `t_max≈0.4` setup gives ~10–30 % positives — nothing like the paper's ~1:5·10⁴ imbalance — and all 8 scenarios already converge to MAE 0.002–0.021 vs thresholds 0.05–0.12 without it. Implementing it cleanly requires either continuous labels in `StandardBatch` (breaks Phase 0 contract) or a separate tensor-level loss path. Re-open when wiring real LEGEND data: `core/training.py`'s step is the integration point.
 
 ## Math & Concepts (load-bearing for implementation)
 
