@@ -187,7 +187,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [~] `feat(core): mixup augmentation` — **DEFERRED until real LEGEND data** (see decision note below)
 - [x] `feat: training loop & checkpoint format`
 - [x] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
-- [ ] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
+- [x] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
 
 ### Phase 4 — MFGP
 - [ ] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)

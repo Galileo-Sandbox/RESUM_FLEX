@@ -145,6 +145,117 @@ def _plot_1d(
     plt.close(fig)
 
 
+def plot_comparison_1d(
+    x: np.ndarray,
+    analytical: np.ndarray,
+    predicted: np.ndarray,
+    *,
+    out_path: str | Path,
+    title: str,
+    xlabel: str,
+    ylabel: str = "p",
+    overlay_xy: tuple[np.ndarray, np.ndarray] | None = None,
+    overlay_label: str = "samples",
+    analytical_label: str = "analytical p",
+    predicted_label: str = "predicted β",
+) -> Path:
+    """Overlay analytical and predicted curves on the same 1-D axes.
+
+    Implements the comparison rule for 1-D fields: both curves on a
+    single set of axes, with raw samples (binary X or per-trial rates)
+    optionally scattered underneath for context.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if analytical.shape != predicted.shape or analytical.shape != x.shape:
+        raise ValueError(
+            f"shapes must match: x={x.shape}, analytical={analytical.shape}, "
+            f"predicted={predicted.shape}"
+        )
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    if overlay_xy is not None:
+        ox, oy = overlay_xy
+        jitter = np.random.default_rng(0).uniform(-0.02, 0.02, size=ox.shape)
+        ax.scatter(
+            ox, oy + jitter,
+            s=8, alpha=0.3, c=oy, cmap="coolwarm", label=overlay_label,
+            zorder=1,
+        )
+    ax.plot(x, analytical, color="C0", linewidth=2.4, label=analytical_label, zorder=3)
+    ax.plot(
+        x, predicted, color="C3", linewidth=2.0, linestyle="--",
+        label=predicted_label, zorder=2,
+    )
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_ylim(-0.05, 1.05)
+    ax.legend(loc="best")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
+    return out_path
+
+
+def plot_comparison_2d(
+    analytical: np.ndarray,
+    predicted: np.ndarray,
+    axis_grids: Sequence[np.ndarray],
+    *,
+    out_path: str | Path,
+    title: str,
+    axis_labels: Sequence[str],
+    value_label: str = "p",
+    cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+) -> Path:
+    """Side-by-side heatmaps ``[analytical | predicted]`` with a shared colorbar.
+
+    Implements the comparison rule for 2-D fields: both panels on the
+    same colorbar so a darker spot on the right is darker for the right
+    reason. ``vmin`` / ``vmax`` default to the joint min/max across the
+    two arrays so noise differences don't induce spurious contrast.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if len(axis_grids) != 2:
+        raise ValueError(f"plot_comparison_2d expects 2 axis grids, got {len(axis_grids)}")
+    expected_shape = (len(axis_grids[0]), len(axis_grids[1]))
+    for name, arr in [("analytical", analytical), ("predicted", predicted)]:
+        if arr.shape != expected_shape:
+            raise ValueError(
+                f"{name}.shape={arr.shape} does not match grid {expected_shape}"
+            )
+    if vmin is None:
+        vmin = float(min(analytical.min(), predicted.min()))
+    if vmax is None:
+        vmax = float(max(analytical.max(), predicted.max()))
+
+    g0, g1 = axis_grids
+    extent = (g1[0], g1[-1], g0[0], g0[-1])
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
+    for ax, arr, panel_title in [
+        (axes[0], analytical, "analytical p"),
+        (axes[1], predicted, "predicted β"),
+    ]:
+        im = ax.imshow(
+            arr, origin="lower", extent=extent, aspect="auto",
+            cmap=cmap, vmin=vmin, vmax=vmax,
+        )
+        ax.set_title(panel_title)
+        ax.set_xlabel(axis_labels[1])
+    axes[0].set_ylabel(axis_labels[0])
+    fig.suptitle(title)
+    fig.colorbar(im, ax=axes, label=value_label, shrink=0.9)
+    fig.savefig(out_path, dpi=130, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def _plot_2d(
     values: np.ndarray,
     axis_grids: Sequence[np.ndarray],
