@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resum-flex"
+version = "0.0.1"
+description = "Modular refactor of RESuM: Rare Event Surrogate Model with universal input handling."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "torch>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+gp = ["GPy>=1.10", "emukit>=0.4.10"]
+dev = ["pytest>=7.4", "ruff>=0.1.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["schemas*", "core*", "data*", "viz*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"

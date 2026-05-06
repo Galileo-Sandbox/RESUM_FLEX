@@ -1,0 +1,32 @@
+seed: 42
+
+encoder:
+  type: mlp
+  latent_dim: 64
+  hidden_dims: [128, 128]
+  dropout: 0.0
+
+cnp:
+  n_context_min: 16
+  n_context_max: 64
+  output_activation: sigmoid
+  mixup_alpha: 0.1
+
+mfgp:
+  kernel: rbf
+  n_fidelities: 3
+
+ivr:
+  n_mc_samples: 1000
+
+# Per-scenario MAE thresholds for Phase 3 acceptance gate.
+# Higher-dim scenarios get looser tolerance.
+mae_thresholds:
+  s1: 0.05
+  s2: 0.08
+  s3: 0.08
+  s4: 0.12
+  s5: 0.05
+  s6: 0.08
+  s7: 0.05
+  s8: 0.08
