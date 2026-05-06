@@ -202,7 +202,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 
 ### Cross-cutting
 - [ ] CI workflow (pytest + ruff)
-- [ ] User-facing README (separate from CLAUDE.md, which is the agent brief)
+- [x] User-facing README (separate from CLAUDE.md, which is the agent brief)
 
 ### Deferred decisions
 
