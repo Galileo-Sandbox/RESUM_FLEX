@@ -32,7 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
-from core import build_cnp, train_cnp  # noqa: E402
+from core import (  # noqa: E402
+    build_cnp,
+    cnp_trial_predictive,
+    split_context_target,
+    train_cnp,
+)
 from data.pseudo_generator import PseudoDataGenerator, for_scenario  # noqa: E402
 from schemas.config import (  # noqa: E402
     CNPConfig,
@@ -40,7 +45,11 @@ from schemas.config import (  # noqa: E402
     TrainingConfig,
 )
 from schemas.data_models import InputMode, StandardBatch  # noqa: E402
-from viz import plot_comparison_1d, plot_comparison_2d  # noqa: E402
+from viz import (  # noqa: E402
+    plot_comparison_1d,
+    plot_comparison_2d,
+    plot_coverage_test,
+)
 
 OUT_DIR = Path("viz_output")
 N_GRID = 80
@@ -428,29 +437,75 @@ def _plot_theta_1d_full(name: str, gen, cnp, out_path: Path) -> None:
     )
 
 
+def _coverage_test(name: str, gen, cnp, out_path: Path) -> dict[str, float]:
+    """Pre-MFGP coverage check on 100 fresh held-out trials.
+
+    Splits each trial into context / target, predicts the trial-level
+    distribution from the CNP (epistemic + aleatoric), and plots the
+    Figure-5-style band chart. Returns the coverage dict.
+    """
+    n_trials, n_events, n_context = 100, 128, 64
+    test = gen.generate(n_trials=n_trials, n_events=n_events, seed=98765)
+    ctx, tgt = split_context_target(test, n_context=n_context, seed=98766)
+
+    pred = cnp_trial_predictive(cnp, ctx, tgt, n_mc_samples=200)
+    y_raw = tgt.labels.mean(axis=1).astype(float)
+
+    return plot_coverage_test(
+        y_raw=y_raw,
+        y_predicted=pred["y_cnp"],
+        sigma_predicted=pred["sigma_total"],
+        out_path=out_path,
+        title=(
+            f"{name} — Pre-MFGP coverage (CNP only, {n_trials} held-out trials, "
+            f"σ = √(σ²_epistemic + σ²_aleatoric))"
+        ),
+        predicted_label="y_CNP",
+    )
+
+
 def main() -> None:
     OUT_DIR.mkdir(exist_ok=True)
+    coverage_summary: dict[str, dict[str, float]] = {}
     for name, fn in PLOTTERS.items():
         out = OUT_DIR / f"cnp_reconstruction_{name}.png"
         print(f"  training & plotting {name} ...")
         fn(out)
         print(f"  wrote {out}")
+
+        # The plotters above don't return the trained CNP, so re-train once
+        # per scenario for the θ-projection and coverage extras (1–3 s each;
+        # keeps each plotter self-contained and reproducible from one seed).
+        torch.manual_seed(0)
+        np.random.seed(0)
+        gen = for_scenario(name, seed=0)
+        cnp = build_cnp(_enc_cfg(), gen.dim_theta, gen.dim_phi)
+        train_cnp(
+            cnp, gen, cnp_config=_cnp_cfg(), training_config=_train_cfg(name)
+        )
+        cnp.eval()
+
         if name in THETA_1D_EXTRA_FOR:
-            # Re-train for the projection (cheap: ~1 s); deliberate to keep
-            # each plotter self-contained and reproducible from the same seed.
-            torch.manual_seed(0)
-            np.random.seed(0)
-            gen = for_scenario(name, seed=0)
-            cnp = build_cnp(_enc_cfg(), gen.dim_theta, gen.dim_phi)
-            train_cnp(
-                cnp, gen,
-                cnp_config=_cnp_cfg(),
-                training_config=_train_cfg(name),
-            )
-            cnp.eval()
             extra = OUT_DIR / f"cnp_reconstruction_{name}_theta.png"
             _plot_theta_1d_full(name, gen, cnp, extra)
             print(f"  wrote {extra}")
+
+        cov_path = OUT_DIR / f"cnp_coverage_{name}.png"
+        coverage = _coverage_test(name, gen, cnp, cov_path)
+        coverage_summary[name] = coverage
+        print(
+            f"  wrote {cov_path}  "
+            f"(1σ={coverage['1sigma']:.0%} 2σ={coverage['2sigma']:.0%} "
+            f"3σ={coverage['3sigma']:.0%})"
+        )
+
+    # Final summary table.
+    print("\n  Coverage summary (target: 1σ≈68%, 2σ≈95%, 3σ≈99.7%):")
+    print("    scenario   1σ      2σ      3σ")
+    for name, cov in coverage_summary.items():
+        s1, s2, s3 = cov["1sigma"], cov["2sigma"], cov["3sigma"]
+        flag = " ⚠ LOW" if s1 < 0.30 else ""
+        print(f"    {name}        {s1:5.0%}   {s2:5.0%}   {s3:5.0%}{flag}")
 
 
 if __name__ == "__main__":

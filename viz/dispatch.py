@@ -256,6 +256,101 @@ def plot_comparison_2d(
     return out_path
 
 
+def plot_coverage_test(
+    y_raw: np.ndarray,
+    y_predicted: np.ndarray,
+    sigma_predicted: np.ndarray,
+    *,
+    out_path: str | Path,
+    title: str,
+    sort_by_predicted: bool = True,
+    xlabel: str | None = None,
+    predicted_label: str = "y_predicted",
+    raw_label: str = "y_raw = m/N",
+) -> dict[str, float]:
+    """Figure-5-style coverage plot: predicted distribution vs raw observations.
+
+    Plots ``y_predicted`` as a line with ``±1σ / ±2σ / ±3σ`` shaded bands,
+    and overlays the noisy observations ``y_raw`` as black dots. Computes
+    coverage at each level (fraction of ``y_raw`` falling inside the band)
+    and embeds the percentages in the legend.
+
+    Trials are sorted by ``y_predicted`` ascending for visual clarity unless
+    ``sort_by_predicted=False`` (preserves the input order).
+
+    Returns
+    -------
+    dict[str, float]
+        ``{"1sigma": ..., "2sigma": ..., "3sigma": ...}`` — coverage
+        fractions in ``[0, 1]``.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not (y_raw.shape == y_predicted.shape == sigma_predicted.shape):
+        raise ValueError(
+            f"shape mismatch: y_raw={y_raw.shape}, y_predicted={y_predicted.shape}, "
+            f"sigma={sigma_predicted.shape}"
+        )
+    if y_raw.ndim != 1:
+        raise ValueError(f"inputs must be 1-D arrays of length B; got ndim={y_raw.ndim}")
+    if np.any(sigma_predicted < 0):
+        raise ValueError("sigma_predicted must be non-negative")
+
+    # Coverage is order-invariant; compute on the unsorted arrays.
+    abs_diff = np.abs(y_raw - y_predicted)
+    coverage = {
+        "1sigma": float((abs_diff <= 1.0 * sigma_predicted).mean()),
+        "2sigma": float((abs_diff <= 2.0 * sigma_predicted).mean()),
+        "3sigma": float((abs_diff <= 3.0 * sigma_predicted).mean()),
+    }
+
+    if sort_by_predicted:
+        order = np.argsort(y_predicted)
+    else:
+        order = np.arange(len(y_predicted))
+    y_p = y_predicted[order]
+    s_p = sigma_predicted[order]
+    y_r = y_raw[order]
+    x = np.arange(len(y_p))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    # Layered bands, outermost first so inner bands stay visible.
+    ax.fill_between(
+        x, y_p - 3 * s_p, y_p + 3 * s_p,
+        color="#d62728", alpha=0.18,
+        label=f"±3σ ({coverage['3sigma'] * 100:.0f}%)",
+    )
+    ax.fill_between(
+        x, y_p - 2 * s_p, y_p + 2 * s_p,
+        color="#ffd700", alpha=0.40,
+        label=f"±2σ ({coverage['2sigma'] * 100:.0f}%)",
+    )
+    ax.fill_between(
+        x, y_p - 1 * s_p, y_p + 1 * s_p,
+        color="#2ca02c", alpha=0.50,
+        label=f"±1σ ({coverage['1sigma'] * 100:.0f}%)",
+    )
+    ax.plot(x, y_p, color="C0", linewidth=1.8, label=predicted_label, zorder=3)
+    ax.scatter(x, y_r, c="black", s=14, alpha=0.85, label=raw_label, zorder=4)
+
+    ax.set_title(title)
+    ax.set_xlabel(
+        xlabel if xlabel is not None
+        else ("Trial (sorted by predicted)" if sort_by_predicted else "Trial index")
+    )
+    ax.set_ylabel("y")
+    ax.set_ylim(
+        min(-0.02, float((y_p - 3 * s_p).min()) - 0.02),
+        max(1.02, float(y_r.max()) + 0.05, float((y_p + 3 * s_p).max()) + 0.02),
+    )
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
+    return coverage
+
+
 def _plot_2d(
     values: np.ndarray,
     axis_grids: Sequence[np.ndarray],

@@ -20,6 +20,8 @@ from typing import Any
 import numpy as np
 import torch
 
+import torch.nn.functional as F
+
 from core.surrogate_cnp import (
     ConditionalNeuralProcess,
     build_cnp,
@@ -152,6 +154,65 @@ def evaluate_mae(
         beta = cnp.predict_beta(ctx, tgt).cpu().numpy()
     p = _truth_at_targets(generator, tgt)
     return float(np.abs(beta - p).mean())
+
+
+def cnp_trial_predictive(
+    cnp: ConditionalNeuralProcess,
+    ctx_batch: StandardBatch,
+    target_batch: StandardBatch,
+    *,
+    n_mc_samples: int = 200,
+    include_aleatoric: bool = True,
+) -> dict[str, np.ndarray]:
+    """Trial-level predictive distribution over ``y = m/N``.
+
+    Uses the CNP decoder's per-event Gaussian over the score ``β`` to
+    derive a per-trial mean ``y_CNP`` and uncertainty ``σ_CNP``. The
+    propagation has two pieces:
+
+    * **Epistemic** (from the decoder's ``σ_NN``): MC-sample
+      ``β_i = sigmoid(μ_i + softplus(log σ_i)·ε_i)`` for ``K`` independent
+      noise draws, take the per-sample trial mean, then the std across
+      samples. Captures how confidently the CNP knows the rate.
+    * **Aleatoric** (Bernoulli sampling noise on ``y_raw=m/N``):
+      ``√(ŷ(1-ŷ)/N)`` with ``ŷ = y_CNP``. Captures the irreducible noise
+      that ``m/N`` has around any given rate. Set
+      ``include_aleatoric=False`` to inspect epistemic alone (typically
+      much tighter than ``y_raw`` fluctuations and useful as a
+      decoder-calibration diagnostic).
+
+    Returns a dict with keys ``y_cnp``, ``sigma_total``,
+    ``sigma_epistemic``, ``sigma_aleatoric`` — all 1-D arrays of length B.
+    """
+    cnp.eval()
+    with torch.no_grad():
+        out = cnp(ctx_batch, target_batch)
+        sigma = F.softplus(out.log_sigma)                  # [B, N_t]
+        eps = torch.randn(
+            n_mc_samples, *out.mu_logit.shape,
+            dtype=out.mu_logit.dtype, device=out.mu_logit.device,
+        )
+        beta_samples = torch.sigmoid(
+            out.mu_logit.unsqueeze(0) + sigma.unsqueeze(0) * eps
+        )                                                  # [K, B, N_t]
+        y_per_sample = beta_samples.mean(dim=2)            # [K, B]
+    y_cnp = y_per_sample.mean(dim=0).cpu().numpy()
+    sigma_epistemic = y_per_sample.std(dim=0).cpu().numpy()
+
+    n_t = float(target_batch.n_events)
+    sigma_aleatoric = np.sqrt(np.clip(y_cnp * (1.0 - y_cnp), 0.0, None) / n_t)
+
+    if include_aleatoric:
+        sigma_total = np.sqrt(sigma_epistemic**2 + sigma_aleatoric**2)
+    else:
+        sigma_total = sigma_epistemic.copy()
+
+    return {
+        "y_cnp": y_cnp,
+        "sigma_total": sigma_total,
+        "sigma_epistemic": sigma_epistemic,
+        "sigma_aleatoric": sigma_aleatoric,
+    }
 
 
 def _truth_at_targets(

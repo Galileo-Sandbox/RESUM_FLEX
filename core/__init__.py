@@ -10,6 +10,7 @@ from core.surrogate_cnp import (
 )
 from core.training import (
     TrainingHistory,
+    cnp_trial_predictive,
     evaluate_mae,
     load_checkpoint,
     save_checkpoint,
@@ -27,6 +28,7 @@ __all__ = [
     "build_cnp",
     "build_encoder",
     "cnp_loss",
+    "cnp_trial_predictive",
     "evaluate_mae",
     "load_checkpoint",
     "save_checkpoint",
