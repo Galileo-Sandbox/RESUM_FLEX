@@ -170,7 +170,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 ### Phase 2 — Universal encoder
 - [x] `feat(core): MLP dual-latent encoder with null embeddings` — core/networks.py with learnable theta_null / phi_null
 - [x] `test(core): null-embedding identity & dimension matrix` — None inputs map to identical null token; shapes correct for S1–S8
-- [ ] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
+- [x] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
 
 ### Phase 3 — CNP
 - [ ] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
