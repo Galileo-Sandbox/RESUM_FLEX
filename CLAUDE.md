@@ -58,6 +58,51 @@ This rule lives in a single utility (`viz/dispatch.py` or similar) — modules c
 ### Acceptance criterion (per scenario)
 `MAE(predicted_β, ground_truth_p) < threshold` on held-out points from the pseudo-data generator. Threshold lives in `config.yaml` per scenario (looser tolerance for higher-dim cases is expected).
 
+## Visualization & Validation Plan
+
+**Strict progression rule:** no phase advances until its plots match the physical expectation. Every phase emits artifacts to `viz_output/` and they are reviewed before the next phase starts.
+
+### Phase 1 — Pseudo-data ground truth
+File(s): `viz_output/pseudo_ground_truth_S{1..8}.png`
+- 1D θ or 1D φ → smooth `p(·)` curve, overlay the binary `X` samples to show how rare events cluster around the peak.
+- 2D inputs → heatmap of `p(·, ·)`.
+- Cross-check: in `EVENT_ONLY`, plot must vary over φ but stay flat against any dummy θ; mirror in `DESIGN_ONLY`.
+- Pass: plot resembles the intended analytical function (Gaussian hump, sine, etc.).
+
+### Phase 2 — Encoder null embedding
+File(s): `viz_output/encoder_latent_S1_vs_S5.png`, `viz_output/encoder_shape_table.txt`
+- PCA / t-SNE of `z_θ` for S1 (θ provided) vs S5 (θ=None).
+- Hard requirement: every `None` input maps to the **exact same** learnable null-token vector — the S5 cluster must collapse to a single point.
+- Pass: all 8 scenarios flow through without shape mismatch; null cluster is a singleton.
+
+### Phase 3 — CNP reconstruction (the critical denoising test)
+File(s): `viz_output/cnp_reconstruction_S{1..8}.png`
+- S1 (1D θ × 1D φ): heatmap with axes (θ, φ), color = predicted `β`.
+- S5 (1D φ): line plot `β(φ)`, overlaid on Phase 1 ground truth `p(φ)`.
+- S7 (1D θ): line plot `β(θ)`, overlaid on Phase 1 ground truth `p(θ)`.
+- 2D scenarios: predicted-β heatmap next to ground-truth-p heatmap.
+- Pass: `MAE(β, p) < threshold[scenario]` from `config.yaml` AND peaks of predicted β align with peaks of ground-truth p.
+
+### Phase 4 — MFGP fidelity fusion
+File(s): `viz_output/mfgp_posterior_1d.png`, `viz_output/mfgp_qq.png`
+- Fidelity comparison (1D θ): scatter `y_Raw^HF`, curve `y_CNP^LF`, posterior mean μ as solid line, ±σ as shaded band.
+- Calibration: QQ-plot or residual histogram on a held-out HF set.
+- Pass: σ band narrow near HF points, wider in gaps; numerical coverage on holdout approaches 68 / 95 / 99.7%.
+
+### Phase 5 — IVR optimizer
+File(s): `viz_output/optimizer_step_{1..N}.png`
+- 2D θ: heatmap of the IVR acquisition surface.
+- Overlay all previously-sampled θ as dots, the next θ as a red star.
+- Cross-check: the red star sits in the region with highest σ from Phase 4.
+- Pass: across iterations the posterior σ band visibly shrinks across Θ.
+
+| Phase | Output file | What to look for |
+|---|---|---|
+| 1 | `pseudo_ground_truth_*.png` | Probability map looks physical |
+| 3 | `cnp_reconstruction_S{1..8}.png` | Predicted β tracks ground-truth p |
+| 4 | `mfgp_posterior_1d.png`, `mfgp_qq.png` | μ goes through data; σ realistic; coverage 68/95/99.7% |
+| 5 | `optimizer_step_*.png` | Red star in high-σ region; band shrinks each step |
+
 ## Phased Implementation Plan
 
 Phases run in order. Each phase has a hard acceptance gate before the next begins.
@@ -93,6 +138,49 @@ Phases run in order. Each phase has a hard acceptance gate before the next begin
 
 ### Phase 5 — IVR Optimizer (`core/optimizer.py`)
 Final phase, only after MFGP gate passes. Out of scope until Phase 4 is green.
+
+## Commit Plan & Progress Checklist
+
+Each phase ships in small, reviewable commits — never one mega-commit. Plot artifacts in `viz_output/` count toward phase completion. **Update this checklist live**: `[x]` when a commit lands, `[ ]` while pending.
+
+### Phase 0 — Schemas
+- [x] `chore: bootstrap project layout and tooling` — gitignore, pyproject.toml, config.yaml, package skeleton
+- [x] `docs: add architecture brief, math reference, and validation matrix` — CLAUDE.md
+- [x] `feat(schemas): add pydantic data models and config loader` — schemas/data_models.py, schemas/config.py
+- [x] `test(schemas): add Phase 0 acceptance gate` — 26 tests, all green
+
+### Phase 1 — Pseudo-data generator
+- [ ] `feat(viz): dim-dispatch plotting utility` — viz/dispatch.py (1D line / 2D heatmap / ≥3 projection)
+- [ ] `feat(data): pseudo_generator with analytical t(θ,φ)` — data/pseudo_generator.py returns StandardBatch + ground-truth p
+- [ ] `test(data): generator covers all 8 scenarios` — shape, mode, Bernoulli round-trip
+- [ ] `chore: Phase 1 ground-truth plots` — viz_output/pseudo_ground_truth_S{1..8}.png
+
+### Phase 2 — Universal encoder
+- [ ] `feat(core): MLP dual-latent encoder with null embeddings` — core/networks.py with learnable theta_null / phi_null
+- [ ] `test(core): null-embedding identity & dimension matrix` — None inputs map to identical null token; shapes correct for S1–S8
+- [ ] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
+
+### Phase 3 — CNP
+- [ ] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
+- [ ] `feat(core): mixup augmentation` — α from config, addresses 1:5·10⁴ class imbalance
+- [ ] `feat: training loop & checkpoint format`
+- [ ] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
+- [ ] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
+
+### Phase 4 — MFGP
+- [ ] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)
+- [ ] `test(core): coverage 68/95/99.7 on held-out HF`
+- [ ] `chore: Phase 4 posterior + QQ plots` — viz_output/mfgp_posterior_1d.png, viz_output/mfgp_qq.png
+
+### Phase 5 — Optimizer
+- [ ] `feat(core): IVR acquisition with constraint penalties` — core/optimizer.py
+- [ ] `feat: active-learning loop driver`
+- [ ] `test(core): variance shrinkage across iterations`
+- [ ] `chore: Phase 5 acquisition heatmaps` — viz_output/optimizer_step_*.png
+
+### Cross-cutting
+- [ ] CI workflow (pytest + ruff)
+- [ ] User-facing README (separate from CLAUDE.md, which is the agent brief)
 
 ## Math & Concepts (load-bearing for implementation)
 
@@ -183,3 +271,5 @@ This is the project's gold-standard test. The ablation without `y_CNP` got 12% /
 - **Be humble and curious**: if you are unsure about something — feature details, data format, intent — do not guess. Ask the user explicitly.
 - **Be strict with the user and double-check**: what the user says is not always correct. If a statement seems wrong or an idea seems impractical, ask for clarification and state the objection clearly.
 - **Never directly continue right after conversation compression**: stop after compression. The user will re-supply the context, docs, and code to read. Do not start blindly.
+- **Always check the detailed code** if you are not sure about something, if you cannot find the answer from the code, then ask me. don't guess, but check and ask.
+- **Always update the design doc (CLAUDE.md for this project)**, with implementation details and mark the completed bullet points. and record the test results when the tests are done. you don't need to wait until a full commit is finished. you can update more frequently once a bullet point is finished.
