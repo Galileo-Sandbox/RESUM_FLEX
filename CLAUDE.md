@@ -119,6 +119,8 @@ File(s): `viz_output/optimizer_step_{1..N}.png`
 
 Phases run in order. Each phase has a hard acceptance gate before the next begins.
 
+> **Numbering note.** An earlier project brief bundled Encoder + CNP into one "Phase 2 — CNP Training". We split it: our Phase 2 is the universal encoder alone, our Phase 3 is the CNP. The split exists so the encoder's null-embedding identity gate (which has a bit-for-bit pass criterion) doesn't get tangled with CNP training noise. Downstream phases (MFGP, Optimizer) shift to 4 and 5 accordingly.
+
 ### Phase 0 — Schemas (`schemas/data_models.py`)
 - Define `DesignPoint`, `EventBatch`, `StandardBatch`, `ModelPrediction` as pydantic models.
 - `StandardBatch.theta` and `StandardBatch.phi` are `Optional`; presence carried by mask flags.
@@ -138,18 +140,26 @@ Phases run in order. Each phase has a hard acceptance gate before the next begin
 
 ### Phase 3 — CNP (`core/surrogate_cnp.py`)
 - Train CNP on pseudo-data; recover continuous `β ≈ p`.
+- **Training paradigm — context-target split (meta-learning).** Each simulation batch is partitioned per-step into a *context* set (the encoder + aggregator sees these) and a *target* set (the decoder predicts on these). `n_context` is sampled in `[n_context_min, n_context_max]` from `config.cnp`. The model learns to summarize an arbitrary context into a representation that makes the target predictable.
+- **Loss — Bernoulli NLL on `X`, NOT BCE on `X`.** Sample `β` from the Gaussian over the latent `t(θ,φ)` predicted by the decoder, then compute `-log Bernoulli(X | p=β)` summed over targets. The point is to estimate `p`, not to classify `X`.
+- **Aggregator axis — reduce over `N`, NEVER over `B`.** The aggregator collapses the per-event latents `[B, N_ctx, Z]` into a per-trial summary `[B, Z]` by taking the mean along the *event* axis. Reducing over the batch axis would mix unrelated trials and silently break learning. (See "Implementation gotchas" in the Math section.)
 - **Gate (1D):** for 1D θ or φ, regression curve must pass through the dense center of the binary `X` cloud.
 - **Gate (2D):** for 2D inputs, predicted `β` heatmap "peaks" must align with ground-truth `p` heatmap peaks.
-- **Quantitative gate:** MAE(β, p) below per-scenario threshold from config.
+- **Quantitative gate:** `MAE(β, p) < threshold` per scenario from `config.yaml`.
+- **Plot:** apply the comparison rule (1D overlay; 2D side-by-side with shared colorbar) — see Visualization section.
 
 ### Phase 4 — MFGP (`core/surrogate_mfgp.py`)
-- Co-kriging across `y_CNP^LF`, `y_CNP^HF`, `y_Raw^HF`, parameterized over arbitrary `dim(θ)`.
+- **MFGP input is `θ` only — `φ` is marginalized out.** The aggregated CNP score `β̄(θ_k) = (1/N) Σ_i β_ki` is what the GP sees; per-event randomness is collapsed before this layer. Three fidelity datasets feed in (`β̄^LF`, `β̄^HF`, `y_Raw^HF`), all keyed by `θ`.
+- Co-kriging via Emukit/GPy, parameterized over arbitrary `dim(θ)`.
 - **Gate (1D θ):** plot posterior mean with shaded confidence band.
 - **Gate (2D θ):** plot 3D response surface.
 - **Gate (coverage):** on held-out HF samples, ±1σ/±2σ/±3σ coverage approaches 68/95/99.7%.
 
 ### Phase 5 — IVR Optimizer (`core/optimizer.py`)
-Final phase, only after MFGP gate passes. Out of scope until Phase 4 is green.
+- IVR acquisition with constraint penalties; gradient-based selection of `θ_next`.
+- Canonical demonstration: a **5-step active-learning loop** that picks `θ_next` from the trained MFGP, re-evaluates the truth at that point, retrains, repeats.
+- Visualize uncertainty reduction across iterations (see Phase 5 viz spec).
+- Final phase; out of scope until Phase 4 coverage gate is green.
 
 ## Commit Plan & Progress Checklist
 
@@ -261,7 +271,7 @@ This is the project's gold-standard test. The ablation without `y_CNP` got 12% /
 ### Implementation gotchas these formulas imply
 - CNP output activation must keep `β ∈ [0,1]` — `μ_NN` should be passed through sigmoid (or use a bounded distribution).
 - CNP loss is **not** BCE on `X`; it's Bernoulli NLL with `p` sampled from a Gaussian over `β`. Test this on synthetic data where ground-truth `t(θ,φ)` is known.
-- Aggregator is mean over the event axis; don't accidentally reduce over batch.
+- **Aggregator axis (CRITICAL):** the CNP aggregator reduces along the **event axis `N`**, *never* along the **batch axis `B`**. Latents `[B, N_ctx, Z]` collapse to `[B, Z]` via `mean(dim=1)` (not `dim=0`). Reducing over `B` mixes unrelated trials and destroys learning silently — the loss still goes down, the predictions are garbage. Add an explicit `assert` on the aggregated tensor's first dim.
 - MFGP must accept `(θ_k, y_CNP^LF_k)`, `(θ_k, y_CNP^HF_k)`, `(θ_k, y_Raw^HF_k)` as three separate fidelity datasets, not stacked — Emukit's API handles this explicitly.
 - IVR acquisition needs to evaluate the GP posterior fast and many times — keep the GP backend (GPy) hot, don't re-instantiate per call.
 
