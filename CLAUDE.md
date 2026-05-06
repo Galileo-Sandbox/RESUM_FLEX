@@ -62,6 +62,16 @@ This rule lives in a single utility (`viz/dispatch.py` or similar) — modules c
 
 **Strict progression rule:** no phase advances until its plots match the physical expectation. Every phase emits artifacts to `viz_output/` and they are reviewed before the next phase starts.
 
+### Comparison rule (when a prediction exists)
+
+Whenever a downstream module (CNP, MFGP) produces a prediction over the same input space as the analytical ground truth, the plot **must place ground truth and prediction together** so the eye can do a direct comparison:
+
+- **1D fields** → both curves on the **same axes** (overlay): analytical `t(·)` and the predicted curve (`β`, MFGP `μ`, …). Keep the binary `X` scatter underneath so the noise context is visible.
+- **2D fields** → **side-by-side subplots** with a **shared colorbar**: left = ground truth, right = prediction (or empirical estimate). Same `vmin/vmax` so a darker spot on the right is darker for the right reason.
+- **3D / 4D fields** (S2, S3, S4) → same layout as 2D, but the prediction subplot uses a **thin-slab projection**: keep only samples whose un-shown coordinate(s) fall within `±ε` of the slice value, then bin on the visible grid. Increase sample count to keep slab bins populated; the comparison is qualitative (shape & peak agreement), not pixel-exact.
+
+Phase 1 is **ground-truth-only** — nothing to compare against yet, so the current plots stay as the reference baseline. The comparison rule activates from Phase 3 onward.
+
 ### Phase 1 — Pseudo-data ground truth
 File(s): `viz_output/pseudo_ground_truth_S{1..8}.png`
 - 1D θ or 1D φ → smooth `p(·)` curve, overlay the binary `X` samples to show how rare events cluster around the peak.
@@ -77,15 +87,17 @@ File(s): `viz_output/encoder_latent_S1_vs_S5.png`, `viz_output/encoder_shape_tab
 
 ### Phase 3 — CNP reconstruction (the critical denoising test)
 File(s): `viz_output/cnp_reconstruction_S{1..8}.png`
-- S1 (1D θ × 1D φ): heatmap with axes (θ, φ), color = predicted `β`.
-- S5 (1D φ): line plot `β(φ)`, overlaid on Phase 1 ground truth `p(φ)`.
-- S7 (1D θ): line plot `β(θ)`, overlaid on Phase 1 ground truth `p(θ)`.
-- 2D scenarios: predicted-β heatmap next to ground-truth-p heatmap.
+Apply the **comparison rule** in every panel:
+- 1D scenarios (S5, S7): overlay analytical `p(·)` and predicted `β(·)` on the same axes; binary `X` scatter underneath.
+- 2D scenarios (S1, S6, S8): side-by-side heatmaps `[ground-truth p | predicted β]`, shared colorbar.
+- 3D/4D scenarios (S2, S3, S4): same side-by-side layout, but the predicted-β panel is computed on the same slice axes used by Phase 1.
 - Pass: `MAE(β, p) < threshold[scenario]` from `config.yaml` AND peaks of predicted β align with peaks of ground-truth p.
 
 ### Phase 4 — MFGP fidelity fusion
-File(s): `viz_output/mfgp_posterior_1d.png`, `viz_output/mfgp_qq.png`
-- Fidelity comparison (1D θ): scatter `y_Raw^HF`, curve `y_CNP^LF`, posterior mean μ as solid line, ±σ as shaded band.
+File(s): `viz_output/mfgp_posterior_1d.png`, `viz_output/mfgp_posterior_2d.png`, `viz_output/mfgp_qq.png`
+Apply the **comparison rule**:
+- 1D θ: scatter raw `y_Raw^HF`, curve `y_CNP^LF`, **and** the analytical `t̄(θ)` from the pseudo-data generator, all overlaid; posterior mean `μ` as a solid line with `±σ` shaded band on the same axes. The analytical truth is the visual yardstick — `μ` should hug it where data exists.
+- 2D θ: side-by-side heatmaps `[analytical t̄ | MFGP μ]`, shared colorbar; a third panel for `σ` (uncertainty map) is welcome.
 - Calibration: QQ-plot or residual histogram on a held-out HF set.
 - Pass: σ band narrow near HF points, wider in gaps; numerical coverage on holdout approaches 68 / 95 / 99.7%.
 
