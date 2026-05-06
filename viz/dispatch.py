@@ -263,26 +263,25 @@ def plot_coverage_test(
     *,
     out_path: str | Path,
     title: str,
-    sort_by_predicted: bool = True,
-    xlabel: str | None = None,
+    xlabel: str = "Trial index",
     predicted_label: str = "y_predicted",
     raw_label: str = "y_raw = m/N",
 ) -> dict[str, float]:
-    """Figure-5-style coverage plot: predicted distribution vs raw observations.
+    """Figure-5-style coverage diagnostic with a calibration sub-panel.
 
-    Plots ``y_predicted`` as a line with ``±1σ / ±2σ / ±3σ`` shaded bands,
-    and overlays the noisy observations ``y_raw`` as black dots. Computes
-    coverage at each level (fraction of ``y_raw`` falling inside the band)
-    and embeds the percentages in the legend.
+    Two-panel figure:
 
-    Trials are sorted by ``y_predicted`` ascending for visual clarity unless
-    ``sort_by_predicted=False`` (preserves the input order).
+    * **Left (time series)** — ``y_predicted`` as a line, ``±1/2/3 σ``
+      shaded bands, ``y_raw`` overlaid as black dots. Trials are kept in
+      their natural input order (no sorting), so the bands and dots jump
+      around together — and the "are dots inside the bands?" question
+      stays honest, not visually choreographed by sorting.
+    * **Right (calibration)** — paired bars per σ level: target Gaussian
+      coverage (68.27 / 95.45 / 99.73 %) vs measured. A well-calibrated
+      predictor has paired bars of equal height; under-tight bands sit
+      below target, over-wide ones sit above.
 
-    Returns
-    -------
-    dict[str, float]
-        ``{"1sigma": ..., "2sigma": ..., "3sigma": ...}`` — coverage
-        fractions in ``[0, 1]``.
+    Returns the measured coverage dict.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -296,55 +295,77 @@ def plot_coverage_test(
     if np.any(sigma_predicted < 0):
         raise ValueError("sigma_predicted must be non-negative")
 
-    # Coverage is order-invariant; compute on the unsorted arrays.
     abs_diff = np.abs(y_raw - y_predicted)
     coverage = {
         "1sigma": float((abs_diff <= 1.0 * sigma_predicted).mean()),
         "2sigma": float((abs_diff <= 2.0 * sigma_predicted).mean()),
         "3sigma": float((abs_diff <= 3.0 * sigma_predicted).mean()),
     }
+    target = {"1sigma": 0.6827, "2sigma": 0.9545, "3sigma": 0.9973}
 
-    if sort_by_predicted:
-        order = np.argsort(y_predicted)
-    else:
-        order = np.arange(len(y_predicted))
-    y_p = y_predicted[order]
-    s_p = sigma_predicted[order]
-    y_r = y_raw[order]
-    x = np.arange(len(y_p))
+    x = np.arange(len(y_predicted))
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    # Layered bands, outermost first so inner bands stay visible.
-    ax.fill_between(
-        x, y_p - 3 * s_p, y_p + 3 * s_p,
+    fig, (ax_ts, ax_cal) = plt.subplots(
+        1, 2, figsize=(13, 5),
+        gridspec_kw={"width_ratios": [3, 1]},
+    )
+
+    # ---- Left: time series ----
+    ax_ts.fill_between(
+        x, y_predicted - 3 * sigma_predicted, y_predicted + 3 * sigma_predicted,
         color="#d62728", alpha=0.18,
         label=f"±3σ ({coverage['3sigma'] * 100:.0f}%)",
     )
-    ax.fill_between(
-        x, y_p - 2 * s_p, y_p + 2 * s_p,
+    ax_ts.fill_between(
+        x, y_predicted - 2 * sigma_predicted, y_predicted + 2 * sigma_predicted,
         color="#ffd700", alpha=0.40,
         label=f"±2σ ({coverage['2sigma'] * 100:.0f}%)",
     )
-    ax.fill_between(
-        x, y_p - 1 * s_p, y_p + 1 * s_p,
+    ax_ts.fill_between(
+        x, y_predicted - 1 * sigma_predicted, y_predicted + 1 * sigma_predicted,
         color="#2ca02c", alpha=0.50,
         label=f"±1σ ({coverage['1sigma'] * 100:.0f}%)",
     )
-    ax.plot(x, y_p, color="C0", linewidth=1.8, label=predicted_label, zorder=3)
-    ax.scatter(x, y_r, c="black", s=14, alpha=0.85, label=raw_label, zorder=4)
+    ax_ts.plot(x, y_predicted, color="C0", linewidth=1.5, label=predicted_label, zorder=3)
+    ax_ts.scatter(x, y_raw, c="black", s=14, alpha=0.85, label=raw_label, zorder=4)
+    ax_ts.set_xlabel(xlabel)
+    ax_ts.set_ylabel("y")
+    lo = min(-0.02, float((y_predicted - 3 * sigma_predicted).min()) - 0.02)
+    hi = max(
+        1.02,
+        float(y_raw.max()) + 0.05,
+        float((y_predicted + 3 * sigma_predicted).max()) + 0.02,
+    )
+    ax_ts.set_ylim(lo, hi)
+    ax_ts.legend(loc="best", fontsize=9)
+    ax_ts.grid(alpha=0.3)
 
-    ax.set_title(title)
-    ax.set_xlabel(
-        xlabel if xlabel is not None
-        else ("Trial (sorted by predicted)" if sort_by_predicted else "Trial index")
+    # ---- Right: calibration ----
+    levels = ["1σ", "2σ", "3σ"]
+    target_vals = [target["1sigma"], target["2sigma"], target["3sigma"]]
+    actual_vals = [coverage["1sigma"], coverage["2sigma"], coverage["3sigma"]]
+    pos = np.arange(len(levels))
+    w = 0.38
+    ax_cal.bar(
+        pos - w / 2, target_vals, w,
+        color="lightgray", edgecolor="black", label="target (Gaussian)",
     )
-    ax.set_ylabel("y")
-    ax.set_ylim(
-        min(-0.02, float((y_p - 3 * s_p).min()) - 0.02),
-        max(1.02, float(y_r.max()) + 0.05, float((y_p + 3 * s_p).max()) + 0.02),
+    ax_cal.bar(
+        pos + w / 2, actual_vals, w,
+        color="C0", edgecolor="black", label="actual",
     )
-    ax.legend(loc="best", fontsize=9)
-    ax.grid(alpha=0.3)
+    for p, t_, a_ in zip(pos, target_vals, actual_vals, strict=True):
+        ax_cal.text(p - w / 2, t_ + 0.015, f"{t_ * 100:.1f}%", ha="center", fontsize=8)
+        ax_cal.text(p + w / 2, a_ + 0.015, f"{a_ * 100:.1f}%", ha="center", fontsize=8)
+    ax_cal.set_xticks(pos)
+    ax_cal.set_xticklabels(levels)
+    ax_cal.set_ylim(0.0, 1.12)
+    ax_cal.set_ylabel("coverage fraction")
+    ax_cal.set_title("calibration")
+    ax_cal.legend(loc="lower right", fontsize=8)
+    ax_cal.grid(alpha=0.3, axis="y")
+
+    fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)
