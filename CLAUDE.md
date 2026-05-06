@@ -168,8 +168,8 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `chore: Phase 1 ground-truth plots` — viz_output/pseudo_ground_truth_S{1..8}.png
 
 ### Phase 2 — Universal encoder
-- [ ] `feat(core): MLP dual-latent encoder with null embeddings` — core/networks.py with learnable theta_null / phi_null
-- [ ] `test(core): null-embedding identity & dimension matrix` — None inputs map to identical null token; shapes correct for S1–S8
+- [x] `feat(core): MLP dual-latent encoder with null embeddings` — core/networks.py with learnable theta_null / phi_null
+- [x] `test(core): null-embedding identity & dimension matrix` — None inputs map to identical null token; shapes correct for S1–S8
 - [ ] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
 
 ### Phase 3 — CNP
