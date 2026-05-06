@@ -8,6 +8,13 @@ from core.surrogate_cnp import (
     cnp_loss,
     split_context_target,
 )
+from core.training import (
+    TrainingHistory,
+    evaluate_mae,
+    load_checkpoint,
+    save_checkpoint,
+    train_cnp,
+)
 
 __all__ = [
     "CnpDecoder",
@@ -15,9 +22,14 @@ __all__ = [
     "ConditionalNeuralProcess",
     "ContextPointEncoder",
     "MLPEncoder",
+    "TrainingHistory",
     "UniversalEncoder",
     "build_cnp",
     "build_encoder",
     "cnp_loss",
+    "evaluate_mae",
+    "load_checkpoint",
+    "save_checkpoint",
     "split_context_target",
+    "train_cnp",
 ]

@@ -19,6 +19,18 @@ mfgp:
 ivr:
   n_mc_samples: 1000
 
+training:
+  n_steps: 1500
+  learning_rate: 1.0e-3
+  batch_size: 16
+  n_events_per_trial: 128
+  n_mc_samples: 4
+  grad_clip: 1.0
+  eval_every: 200
+  eval_batch_size: 32
+  eval_n_events: 256
+  seed: 0
+
 # Per-scenario MAE thresholds for Phase 3 acceptance gate.
 # Higher-dim scenarios get looser tolerance.
 mae_thresholds:

@@ -53,6 +53,25 @@ class IVRConfig(BaseModel):
     n_mc_samples: int = Field(gt=0, default=1000)
 
 
+class TrainingConfig(BaseModel):
+    """CNP training-loop hyperparameters.
+
+    Lives in its own subsection so the model architecture (``CNPConfig``)
+    stays separate from optimization choices.
+    """
+
+    n_steps: int = Field(gt=0, default=1500)
+    learning_rate: float = Field(gt=0.0, default=1.0e-3)
+    batch_size: int = Field(gt=0, default=16)
+    n_events_per_trial: int = Field(gt=0, default=128)
+    n_mc_samples: int = Field(gt=0, default=4)
+    grad_clip: float | None = Field(default=1.0)
+    eval_every: int = Field(ge=0, default=100)
+    eval_batch_size: int = Field(gt=0, default=32)
+    eval_n_events: int = Field(gt=0, default=256)
+    seed: int = 0
+
+
 class ScenarioThresholds(BaseModel):
     """Per-scenario MAE thresholds for the Phase 3 acceptance gate."""
 
@@ -72,6 +91,7 @@ class Config(BaseModel):
     cnp: CNPConfig
     mfgp: MFGPConfig
     ivr: IVRConfig
+    training: TrainingConfig = Field(default_factory=TrainingConfig)
     mae_thresholds: ScenarioThresholds
 
 

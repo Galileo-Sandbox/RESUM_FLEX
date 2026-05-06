@@ -185,7 +185,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 ### Phase 3 — CNP
 - [x] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
 - [ ] `feat(core): mixup augmentation` — α from config, addresses 1:5·10⁴ class imbalance
-- [ ] `feat: training loop & checkpoint format`
+- [x] `feat: training loop & checkpoint format`
 - [ ] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
 - [ ] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
 
