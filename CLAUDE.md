@@ -150,7 +150,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `test(schemas): add Phase 0 acceptance gate` — 26 tests, all green
 
 ### Phase 1 — Pseudo-data generator
-- [ ] `feat(viz): dim-dispatch plotting utility` — viz/dispatch.py (1D line / 2D heatmap / ≥3 projection)
+- [x] `feat(viz): dim-dispatch plotting utility` — viz/dispatch.py (1D line / 2D heatmap / ≥3 projection)
 - [ ] `feat(data): pseudo_generator with analytical t(θ,φ)` — data/pseudo_generator.py returns StandardBatch + ground-truth p
 - [ ] `test(data): generator covers all 8 scenarios` — shape, mode, Bernoulli round-trip
 - [ ] `chore: Phase 1 ground-truth plots` — viz_output/pseudo_ground_truth_S{1..8}.png
