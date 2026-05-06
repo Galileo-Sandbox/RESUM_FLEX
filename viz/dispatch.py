@@ -158,12 +158,18 @@ def plot_comparison_1d(
     overlay_label: str = "samples",
     analytical_label: str = "analytical p",
     predicted_label: str = "predicted β",
+    predicted_sigma: np.ndarray | None = None,
+    predicted_color: str = "C3",
+    sigma_alpha: float = 0.5,
 ) -> Path:
     """Overlay analytical and predicted curves on the same 1-D axes.
 
     Implements the comparison rule for 1-D fields: both curves on a
     single set of axes, with raw samples (binary X or per-trial rates)
     optionally scattered underneath for context.
+
+    If ``predicted_sigma`` is provided, a ``±1σ`` band is filled around
+    the predicted curve in the same colour, with alpha ``sigma_alpha``.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +177,10 @@ def plot_comparison_1d(
         raise ValueError(
             f"shapes must match: x={x.shape}, analytical={analytical.shape}, "
             f"predicted={predicted.shape}"
+        )
+    if predicted_sigma is not None and predicted_sigma.shape != predicted.shape:
+        raise ValueError(
+            f"predicted_sigma.shape={predicted_sigma.shape} != predicted.shape={predicted.shape}"
         )
 
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
@@ -182,10 +192,20 @@ def plot_comparison_1d(
             s=8, alpha=0.3, c=oy, cmap="coolwarm", label=overlay_label,
             zorder=1,
         )
+    if predicted_sigma is not None:
+        ax.fill_between(
+            x,
+            predicted - predicted_sigma,
+            predicted + predicted_sigma,
+            color=predicted_color, alpha=sigma_alpha,
+            linewidth=0,
+            label=f"{predicted_label} ± 1σ",
+            zorder=2,
+        )
     ax.plot(x, analytical, color="C0", linewidth=2.4, label=analytical_label, zorder=3)
     ax.plot(
-        x, predicted, color="C3", linewidth=2.0, linestyle="--",
-        label=predicted_label, zorder=2,
+        x, predicted, color=predicted_color, linewidth=2.0, linestyle="--",
+        label=predicted_label, zorder=4,
     )
     ax.set_title(title)
     ax.set_xlabel(xlabel)

@@ -384,13 +384,23 @@ THETA_1D_EXTRA_FOR = {"S1", "S3"}
 
 
 def _theta_marginal_predicted(
-    gen, cnp, theta_grid: np.ndarray, n_phi_mc: int = 200, seed: int = 11,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Predict the φ-marginalized ``β̄(θ)`` and analytical ``p̄(θ)``.
+    gen, cnp, theta_grid: np.ndarray,
+    n_phi_mc: int = 200, n_decoder_samples: int = 200, seed: int = 11,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, StandardBatch]:
+    """Predict the φ-marginalized ``β̄(θ)`` with a propagated ``σ_β̄(θ)``.
 
-    Used for FULL-mode scenarios when projecting onto θ. ``ctx`` is
-    returned alongside the curves so the caller can scatter the raw
-    binary X events at each trial's θ.
+    For each θ, MC samples β through the decoder's per-event Gaussian at
+    ``n_phi_mc`` random φ points, then averages over φ to get a per-MC
+    sample of ``β̄(θ)``. ``β̄(θ)`` is the mean across MC samples;
+    ``σ_β̄(θ)`` is the std — purely epistemic uncertainty on the marginal.
+
+    Returns
+    -------
+    (p_curve, beta_curve, sigma_curve, ctx)
+        ``p_curve``      analytical ``p̄(θ)`` over the same θ grid.
+        ``beta_curve``   predicted ``β̄(θ)``.
+        ``sigma_curve``  ``±1σ`` predictive band on ``β̄(θ)``.
+        ``ctx``          the context batch (so the caller can overlay raw X).
     """
     rng = np.random.default_rng(seed)
     G = theta_grid.shape[0]
@@ -399,24 +409,38 @@ def _theta_marginal_predicted(
 
     # Analytical p̄(θ) via MC over φ.
     theta_per_event = theta[:, None, :]
-    p_at_phi = gen.truth.evaluate(theta=theta_per_event, phi=phi_mc)  # [G, n_phi_mc]
+    p_at_phi = gen.truth.evaluate(theta=theta_per_event, phi=phi_mc)
     p_curve = p_at_phi.mean(axis=1)
 
-    # Predicted β̄(θ) via MC over φ for each θ.
+    # Predicted β̄(θ) via MC sampling of β at each (θ, φ_mc), then mean over φ.
     ctx = _build_context_FULL(gen, theta=theta, n_ctx=N_CTX, seed=seed)
     tgt_labels = np.zeros((G, n_phi_mc), dtype=np.int8)
     tgt = StandardBatch(
-        mode=InputMode.FULL, theta=theta, phi=phi_mc, labels=tgt_labels
+        mode=InputMode.FULL, theta=theta, phi=phi_mc, labels=tgt_labels,
     )
-    beta_at_phi = _predict_at(cnp, ctx, tgt)                    # [G, n_phi_mc]
-    beta_curve = beta_at_phi.mean(axis=1)
-    return p_curve, beta_curve, ctx
+    cnp.eval()
+    with torch.no_grad():
+        out = cnp(ctx, tgt)
+        sigma = torch.nn.functional.softplus(out.log_sigma)         # [G, n_phi_mc]
+        eps = torch.randn(
+            n_decoder_samples, *out.mu_logit.shape,
+            dtype=out.mu_logit.dtype, device=out.mu_logit.device,
+        )
+        beta_samples = torch.sigmoid(
+            out.mu_logit.unsqueeze(0) + sigma.unsqueeze(0) * eps
+        )                                                            # [K, G, n_phi_mc]
+        beta_per_mc = beta_samples.mean(dim=2)                       # [K, G]
+    beta_curve = beta_per_mc.mean(dim=0).cpu().numpy()
+    sigma_curve = beta_per_mc.std(dim=0).cpu().numpy()
+    return p_curve, beta_curve, sigma_curve, ctx
 
 
 def _plot_theta_1d_full(name: str, gen, cnp, out_path: Path) -> None:
-    """θ-marginal 1-D plot for FULL-mode scenarios (S1, S3)."""
+    """θ-marginal 1-D plot for FULL-mode scenarios (S1, S3) with ±1σ band."""
     theta_grid = _grid_1d()
-    p_curve, beta_curve, ctx = _theta_marginal_predicted(gen, cnp, theta_grid)
+    p_curve, beta_curve, sigma_curve, ctx = _theta_marginal_predicted(
+        gen, cnp, theta_grid
+    )
 
     # Raw per-event dots: (θ_k, X_ki) — one dot per event in the context.
     raw_theta = np.repeat(ctx.theta[:, 0], N_CTX)
@@ -426,6 +450,7 @@ def _plot_theta_1d_full(name: str, gen, cnp, out_path: Path) -> None:
         x=theta_grid,
         analytical=p_curve,
         predicted=beta_curve,
+        predicted_sigma=sigma_curve,
         out_path=out_path,
         title=(
             f"{name} — θ-projection (analytical and predicted "
