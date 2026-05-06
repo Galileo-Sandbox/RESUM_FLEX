@@ -32,6 +32,7 @@ def plot_field(
     axis_labels: Sequence[str] | None = None,
     value_label: str = "p",
     overlay_xy: tuple[np.ndarray, np.ndarray] | None = None,
+    overlay_label: str = "samples",
     cmap: str = "viridis",
     vmin: float | None = None,
     vmax: float | None = None,
@@ -56,6 +57,8 @@ def plot_field(
         Optional ``(x, y)`` arrays to scatter on top of a 1D plot — used to
         show binary samples ``X`` against the analytical ``p(x)`` curve.
         Ignored for 2D plots.
+    overlay_label
+        Legend label for the overlay scatter.
     cmap, vmin, vmax
         Forwarded to matplotlib for 2D plots.
     """
@@ -83,6 +86,7 @@ def plot_field(
             xlabel=axis_labels[0],
             ylabel=value_label,
             overlay_xy=overlay_xy,
+            overlay_label=overlay_label,
         )
     elif n_dims == 2:
         _plot_2d(
@@ -113,6 +117,7 @@ def _plot_1d(
     xlabel: str,
     ylabel: str,
     overlay_xy: tuple[np.ndarray, np.ndarray] | None,
+    overlay_label: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(x, y, color="C0", linewidth=2, label=ylabel)
@@ -127,7 +132,7 @@ def _plot_1d(
             alpha=0.35,
             c=oy,
             cmap="coolwarm",
-            label="X (binary)",
+            label=overlay_label,
         )
     ax.set_title(title)
     ax.set_xlabel(xlabel)
