@@ -150,24 +150,51 @@ def _plot_step_1d(
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharex=True)
     ax_s, ax_a = axes
 
-    ax_s.plot(grid, truth, color="C0", linewidth=1.4, alpha=0.7, label="analytical t̄(θ)")
-    ax_s.plot(grid, sigma, color="C2", linewidth=2.0, label="GP σ(θ)")
     sampled = record.sampled_theta[:, 0]
     # All but the last are prior samples; the last is the just-acquired one.
     prior = sampled[:-1]
     chosen = record.theta_next[0]
-    ax_s.scatter(
-        prior, np.zeros_like(prior),
+
+    # Twin-axis layout: σ(θ) on the LEFT (primary, the thing we care
+    # about for the active-learning question), analytical t̄(θ) on the
+    # RIGHT (context only). Without this, σ ~0.03 vs t̄ ~0.2 makes the
+    # σ curve visually flat against the larger truth signal.
+    sigma_line, = ax_s.plot(
+        grid, sigma, color="C2", linewidth=2.2, label="GP σ(θ)",
+    )
+    sigma_pad = max(0.05 * sigma.max(), 1e-6)
+    ax_s.set_ylim(max(0.0, sigma.min() - sigma_pad), sigma.max() + sigma_pad)
+    ax_s.set_xlabel("θ")
+    ax_s.set_ylabel("posterior σ(θ)", color="C2")
+    ax_s.tick_params(axis="y", labelcolor="C2")
+    ax_s.set_title("posterior σ(θ)  +  analytical t̄(θ) for context")
+    ax_s.grid(alpha=0.3)
+
+    ax_t = ax_s.twinx()
+    truth_line, = ax_t.plot(
+        grid, truth, color="C0", linewidth=1.4, alpha=0.55,
+        linestyle="--", label="analytical t̄(θ)",
+    )
+    ax_t.set_ylabel("analytical t̄(θ)", color="C0")
+    ax_t.tick_params(axis="y", labelcolor="C0")
+    ax_t.set_ylim(0.0, max(truth.max() * 1.05, 1e-6))
+
+    # Sampled-θ markers anchored to the σ axis at its bottom edge so
+    # their position stays meaningful even after the y-limits change.
+    y_marker = ax_s.get_ylim()[0]
+    sampled_dots = ax_s.scatter(
+        prior, np.full_like(prior, y_marker),
         color="black", s=36, zorder=4, label="sampled θ",
     )
-    ax_s.scatter(
-        [chosen], [0.0],
-        color="red", s=180, marker="*", zorder=5, label="θ_next",
+    chosen_star = ax_s.scatter(
+        [chosen], [y_marker],
+        color="red", s=200, marker="*", zorder=5,
+        edgecolor="black", linewidths=0.6, label="θ_next",
     )
-    ax_s.set_xlabel("θ"); ax_s.set_ylabel("value")
-    ax_s.set_title("posterior σ(θ) and ground truth")
-    ax_s.legend(loc="best", fontsize=8)
-    ax_s.grid(alpha=0.3)
+    ax_s.legend(
+        handles=[sigma_line, truth_line, sampled_dots, chosen_star],
+        loc="best", fontsize=8,
+    )
 
     ax_a.plot(grid, acq, color="C3", linewidth=2.0, label="IVR acquisition")
     ax_a.scatter(
@@ -304,10 +331,24 @@ def _run_scenario(name: str) -> dict[str, float]:
     }
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--scenarios", default=",".join(OPTIMIZER_SCENARIOS),
+        help="Comma-separated scenario names to run (default: all six).",
+    )
+    args = parser.parse_args(argv)
+    requested = [s.strip().upper() for s in args.scenarios.split(",") if s.strip()]
+    unknown = [s for s in requested if s not in OPTIMIZER_SCENARIOS]
+    if unknown:
+        raise SystemExit(
+            f"unknown scenario(s) {unknown}; valid: {OPTIMIZER_SCENARIOS}"
+        )
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     summary: dict[str, dict[str, float]] = {}
-    for name in OPTIMIZER_SCENARIOS:
+    for name in requested:
         summary[name] = _run_scenario(name)
 
     print("\n  IV summary (start / final / min, lower is better):")
