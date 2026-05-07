@@ -30,6 +30,11 @@ Three input modalities must be supported: `FULL (θ,φ,X)`, `EVENT_ONLY (φ,X)`,
 - All hyperparameters (layer sizes, kernel types, mixup α, etc.) live in `config.yaml`, loaded via pydantic.
 - `StandardBatch.theta` and `StandardBatch.phi` are `Optional`; presence is communicated via boolean masks.
 
+### Input scaling (do not skip on real data)
+- The CNP encoder is a vanilla MLP; gradient imbalance makes it **scale-blind** when θ or φ components differ in magnitude by ≥ ~10×. The MFGP can compensate via ARD lengthscales, the CNP cannot.
+- Recommended workflow on real (non-uniform-sampled) data: normalize via `core.scaling.MinMaxScaler` (`from_bounds(low, high)` if known, `fit(X)` otherwise) **before** building the `StandardBatch`. Persist the scaler alongside CNP / MFGP checkpoints so predictions can be inverse-transformed back to physical units.
+- `StandardBatch._check_consistency` emits a `ScaleImbalanceWarning` when per-feature ranges differ by more than `SCALE_IMBALANCE_THRESHOLD` (default 10×). Detection only — the framework does not auto-scale, since silent unit changes would surprise users querying back at predict time.
+
 ### Status
 First task is to define `schemas/data_models.py`. No code exists yet beyond this CLAUDE.md.
 

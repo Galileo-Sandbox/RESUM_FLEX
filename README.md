@@ -290,6 +290,55 @@ design_only = StandardBatch(mode=InputMode.DESIGN_ONLY, theta=theta, phi=None, l
 
 The validator throws on shape / mode mismatches at construction time.
 
+#### Normalize before you build the batch (important)
+
+The CNP encoder is an MLP that fits the **raw numerical input**. When
+`θ` (or `φ`) components live on very different scales — e.g. Energy
+∈ [500, 3000] keV alongside Threshold ∈ [0, 1] — gradient imbalance
+makes the encoder *scale-blind*: it tracks the high-magnitude
+dimension and ignores the small one (often by a factor of 100× or
+more, even after long training). The MFGP can compensate via ARD
+lengthscales; the CNP cannot.
+
+**Always normalize physical inputs before building the batch.** Use
+`core.scaling.MinMaxScaler` and persist it alongside your CNP /
+MFGP checkpoint so predictions can be inverse-transformed back to
+physical units later.
+
+```python
+from core import MinMaxScaler
+
+# Preferred: known physical bounds.
+theta_scaler = MinMaxScaler.from_bounds(
+    low=[500.0, 0.0],     # E_min,  T_min
+    high=[3000.0, 1.0],   # E_max,  T_max
+)
+# Fallback: fit from data.
+# theta_scaler = MinMaxScaler.fit(theta_lf)
+
+theta_lf_scaled = theta_scaler.transform(theta_lf)
+
+lf_batch = StandardBatch(
+    mode=InputMode.FULL,
+    theta=theta_lf_scaled,
+    phi=phi_lf,                   # apply a separate scaler to φ if needed
+    labels=labels_lf.astype(np.int8),
+)
+```
+
+If you skip this step on imbalanced inputs, the framework emits a
+`ScaleImbalanceWarning` at `StandardBatch` construction. The threshold
+is a 10× per-feature range gap — see `schemas.data_models.SCALE_IMBALANCE_THRESHOLD`.
+
+When you later predict at a new θ, scale the query with the **same**
+scaler and inverse-transform any θ-shaped outputs (e.g. an
+`active_learning_loop.records[k].theta_next`) back to physical units:
+
+```python
+mu, var = mfgp.predict(theta_scaler.transform(theta_query_raw))
+theta_next_raw = theta_scaler.inverse_transform(record.theta_next.reshape(1, -1))[0]
+```
+
 ### 2. Train the CNP
 
 `train_cnp` consumes a duck-typed *batch generator* — anything with the

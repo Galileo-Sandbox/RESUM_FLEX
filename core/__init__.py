@@ -15,6 +15,7 @@ from core.mfgp_pipeline import (
     prepare_mfgp_datasets,
     prepare_mfgp_datasets_from_batches,
 )
+from core.scaling import MinMaxScaler
 from core.optimizer import (
     ActiveLearningLoop,
     ActiveLearningStep,
@@ -46,6 +47,7 @@ __all__ = [
     "ExpectedImprovementAcquisition",
     "IvrAcquisition",
     "MLPEncoder",
+    "MinMaxScaler",
     "MultiFidelityGP",
     "TrainingHistory",
     "UniversalEncoder",

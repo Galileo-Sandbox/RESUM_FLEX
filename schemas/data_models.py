@@ -19,11 +19,30 @@ missing component, so absence is communicated via ``None`` (and the
 
 from __future__ import annotations
 
+import warnings
 from enum import Enum
 from typing import Annotated, Any
 
 import numpy as np
 from pydantic import BaseModel, BeforeValidator, ConfigDict, model_validator
+
+
+# Per-feature range ratio above which we emit a scale-imbalance warning.
+# Empirically — see CLAUDE.md / README §Scaling — the CNP encoder goes
+# scale-blind around 10× and is severely degraded by ~100×.
+SCALE_IMBALANCE_THRESHOLD = 10.0
+
+
+class ScaleImbalanceWarning(UserWarning):
+    """Emitted when a StandardBatch's θ or φ has dimensions whose
+    range differs by more than :data:`SCALE_IMBALANCE_THRESHOLD`.
+
+    The CNP encoder is an MLP that fits the *raw* numerical input; if
+    one feature spans 10³ and another spans 10⁰, gradients on the
+    small-magnitude feature are dwarfed and the encoder ignores it.
+    Normalize with :class:`core.scaling.MinMaxScaler` before building
+    the batch (see README §Scaling for the recommended workflow).
+    """
 
 
 class InputMode(str, Enum):
@@ -187,7 +206,44 @@ class StandardBatch(BaseModel):
                 )
             if np.any((self.beta < 0.0) | (self.beta > 1.0)):
                 raise ValueError("beta values must lie in [0, 1].")
+
+        self._warn_on_scale_imbalance()
         return self
+
+    def _warn_on_scale_imbalance(self) -> None:
+        """Emit :class:`ScaleImbalanceWarning` when per-feature ranges
+        of ``θ`` or ``φ`` differ by more than
+        :data:`SCALE_IMBALANCE_THRESHOLD` ×.
+
+        Detection only — the user is responsible for normalization
+        (see :class:`core.scaling.MinMaxScaler`). Suppress with
+        ``warnings.simplefilter("ignore", ScaleImbalanceWarning)`` if
+        the imbalance is intentional.
+        """
+        for label, arr in (("theta", self.theta), ("phi", self.phi)):
+            if arr is None or arr.shape[-1] < 2:
+                continue
+            # Range per feature, reduced over all leading axes.
+            reduce_axes = tuple(range(arr.ndim - 1))
+            ranges = arr.max(axis=reduce_axes) - arr.min(axis=reduce_axes)
+            if ranges.size < 2:
+                continue
+            positive = ranges[ranges > 0]
+            if positive.size < 2:
+                continue
+            ratio = float(positive.max() / positive.min())
+            if ratio > SCALE_IMBALANCE_THRESHOLD:
+                warnings.warn(
+                    f"{label} has feature ranges that differ by {ratio:.1f}× "
+                    f"(per-dim ranges = {ranges.tolist()}). The CNP "
+                    "encoder is sensitive to scale imbalance >10× and "
+                    "may become 'feature-blind' to small-magnitude "
+                    "dimensions. Consider normalizing with "
+                    "core.scaling.MinMaxScaler before constructing the "
+                    "StandardBatch.",
+                    ScaleImbalanceWarning,
+                    stacklevel=4,
+                )
 
 
 class ModelPrediction(BaseModel):
