@@ -182,7 +182,7 @@ coverage = plot_coverage_test(
     y_raw=y_raw,
     y_predicted=pred["y_cnp"],
     sigma_predicted=pred["sigma_total"],
-    out_path="viz_output/cnp_coverage_S5.png",
+    out_path="viz_output/phase3_cnp/cnp_coverage_S5.png",
     title="S5 — Pre-MFGP coverage (CNP only, 100 held-out trials)",
 )
 print(coverage)   # {"1sigma": 0.68, "2sigma": 0.96, "3sigma": 1.00}
@@ -195,12 +195,13 @@ decoder-calibration diagnostic instead of the m/N-comparison.
 ### 5. Run a full phase as a script
 
 ```bash
-python scripts/phase1_plot_ground_truth.py        # writes viz_output/pseudo_ground_truth_*.png
-python scripts/phase2_plot_latent.py              # writes encoder_latent_*.png + shape table
-python scripts/phase3_plot_reconstruction.py      # trains CNPs + writes 3 plots × 8 scenarios
+python scripts/phase1_plot_ground_truth.py        # writes viz_output/phase1_ground_truth/*.png
+python scripts/phase2_plot_latent.py              # writes viz_output/phase2_encoder/*
+python scripts/phase3_plot_reconstruction.py      # writes viz_output/phase3_cnp/*.png
+python scripts/phase4_plot_mfgp.py                # writes viz_output/phase4_mfgp/*.png
 ```
 
-`viz_output/` is in `.gitignore` — plots are build products, not source.
+`viz_output/` is in `.gitignore` — plots are build products, not source. Each phase writes to its own subfolder (`phase1_ground_truth/`, `phase2_encoder/`, `phase3_cnp/`, `phase4_mfgp/`).
 
 ## Configuration
 

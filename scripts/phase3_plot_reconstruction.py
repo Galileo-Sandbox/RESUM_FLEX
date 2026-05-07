@@ -1,7 +1,7 @@
 """Phase 3 visual evidence: CNP-reconstructed β vs analytical p, S1..S8.
 
 Trains a CNP per scenario (a few seconds each on CPU) and produces
-``viz_output/cnp_reconstruction_S{1..8}.png`` following the comparison
+``viz_output/phase3_cnp/cnp_reconstruction_S{1..8}.png`` following the comparison
 rule:
 
 * 1-D scenarios (S5, S7) → :func:`plot_comparison_1d` overlays analytical
@@ -51,7 +51,7 @@ from viz import (  # noqa: E402
     plot_coverage_test,
 )
 
-OUT_DIR = Path("viz_output")
+OUT_DIR = Path("viz_output/phase3_cnp")
 N_GRID = 80
 N_CTX = 64
 BUDGET = {
@@ -490,7 +490,7 @@ def _coverage_test(name: str, gen, cnp, out_path: Path) -> dict[str, float]:
 
 
 def main() -> None:
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     coverage_summary: dict[str, dict[str, float]] = {}
     for name, fn in PLOTTERS.items():
         out = OUT_DIR / f"cnp_reconstruction_{name}.png"

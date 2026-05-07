@@ -60,7 +60,7 @@ This rule lives in a single utility (`viz/dispatch.py` or similar) — modules c
 
 ## Visualization & Validation Plan
 
-**Strict progression rule:** no phase advances until its plots match the physical expectation. Every phase emits artifacts to `viz_output/` and they are reviewed before the next phase starts.
+**Strict progression rule:** no phase advances until its plots match the physical expectation. Every phase emits artifacts to its own `viz_output/phaseN_*/` subfolder (`phase1_ground_truth/`, `phase2_encoder/`, `phase3_cnp/`, `phase4_mfgp/`, `phase5_optimizer/`) and they are reviewed before the next phase starts.
 
 ### Comparison rule (when a prediction exists)
 
@@ -73,20 +73,20 @@ Whenever a downstream module (CNP, MFGP) produces a prediction over the same inp
 Phase 1 is **ground-truth-only** — nothing to compare against yet, so the current plots stay as the reference baseline. The comparison rule activates from Phase 3 onward.
 
 ### Phase 1 — Pseudo-data ground truth
-File(s): `viz_output/pseudo_ground_truth_S{1..8}.png`
+File(s): `viz_output/phase1_ground_truth/pseudo_ground_truth_S{1..8}.png`
 - 1D θ or 1D φ → smooth `p(·)` curve, overlay the binary `X` samples to show how rare events cluster around the peak.
 - 2D inputs → heatmap of `p(·, ·)`.
 - Cross-check: in `EVENT_ONLY`, plot must vary over φ but stay flat against any dummy θ; mirror in `DESIGN_ONLY`.
 - Pass: plot resembles the intended analytical function (Gaussian hump, sine, etc.).
 
 ### Phase 2 — Encoder null embedding
-File(s): `viz_output/encoder_latent_S1_vs_S5.png`, `viz_output/encoder_shape_table.txt`
+File(s): `viz_output/phase2_encoder/encoder_latent_S1_vs_S5.png`, `viz_output/phase2_encoder/encoder_shape_table.txt`
 - PCA / t-SNE of `z_θ` for S1 (θ provided) vs S5 (θ=None).
 - Hard requirement: every `None` input maps to the **exact same** learnable null-token vector — the S5 cluster must collapse to a single point.
 - Pass: all 8 scenarios flow through without shape mismatch; null cluster is a singleton.
 
 ### Phase 3 — CNP reconstruction (the critical denoising test)
-File(s): `viz_output/cnp_reconstruction_S{1..8}.png`
+File(s): `viz_output/phase3_cnp/cnp_reconstruction_S{1..8}.png`, `viz_output/phase3_cnp/cnp_coverage_S{1..8}.png`, `viz_output/phase3_cnp/cnp_reconstruction_{S1,S3}_theta.png`
 Apply the **comparison rule** in every panel:
 - 1D scenarios (S5, S7): overlay analytical `p(·)` and predicted `β(·)` on the same axes; binary `X` scatter underneath.
 - 2D scenarios (S1, S6, S8): side-by-side heatmaps `[ground-truth p | predicted β]`, shared colorbar.
@@ -94,7 +94,7 @@ Apply the **comparison rule** in every panel:
 - Pass: `MAE(β, p) < threshold[scenario]` from `config.yaml` AND peaks of predicted β align with peaks of ground-truth p.
 
 ### Phase 4 — MFGP fidelity fusion
-File(s): `viz_output/mfgp_posterior_1d.png`, `viz_output/mfgp_posterior_2d.png`, `viz_output/mfgp_qq.png`
+File(s): `viz_output/phase4_mfgp/mfgp_posterior_S{1..8}.png`, `viz_output/phase4_mfgp/mfgp_coverage_S{1..8}.png`, `viz_output/phase4_mfgp/mfgp_qq.png`
 Apply the **comparison rule**:
 - 1D θ: scatter raw `y_Raw^HF`, curve `y_CNP^LF`, **and** the analytical `t̄(θ)` from the pseudo-data generator, all overlaid; posterior mean `μ` as a solid line with `±σ` shaded band on the same axes. The analytical truth is the visual yardstick — `μ` should hug it where data exists.
 - 2D θ: side-by-side heatmaps `[analytical t̄ | MFGP μ]`, shared colorbar; a third panel for `σ` (uncertainty map) is welcome.
@@ -102,7 +102,7 @@ Apply the **comparison rule**:
 - Pass: σ band narrow near HF points, wider in gaps; numerical coverage on holdout approaches 68 / 95 / 99.7%.
 
 ### Phase 5 — IVR optimizer
-File(s): `viz_output/optimizer_step_{1..N}.png`
+File(s): `viz_output/phase5_optimizer/optimizer_step_{1..N}.png`
 - 2D θ: heatmap of the IVR acquisition surface.
 - Overlay all previously-sampled θ as dots, the next θ as a red star.
 - Cross-check: the red star sits in the region with highest σ from Phase 4.
@@ -163,7 +163,7 @@ Phases run in order. Each phase has a hard acceptance gate before the next begin
 
 ## Commit Plan & Progress Checklist
 
-Each phase ships in small, reviewable commits — never one mega-commit. Plot artifacts in `viz_output/` count toward phase completion. **Update this checklist live**: `[x]` when a commit lands, `[ ]` while pending.
+Each phase ships in small, reviewable commits — never one mega-commit. Plot artifacts in `viz_output/phaseN_*/` count toward phase completion. **Update this checklist live**: `[x]` when a commit lands, `[ ]` while pending.
 
 ### Phase 0 — Schemas
 - [x] `chore: bootstrap project layout and tooling` — gitignore, pyproject.toml, config.yaml, package skeleton
@@ -175,30 +175,30 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `feat(viz): dim-dispatch plotting utility` — viz/dispatch.py (1D line / 2D heatmap / ≥3 projection)
 - [x] `feat(data): pseudo_generator with analytical t(θ,φ)` — data/pseudo_generator.py returns StandardBatch + ground-truth p
 - [x] `test(data): generator covers all 8 scenarios` — shape, mode, Bernoulli round-trip
-- [x] `chore: Phase 1 ground-truth plots` — viz_output/pseudo_ground_truth_S{1..8}.png
+- [x] `chore: Phase 1 ground-truth plots` — viz_output/phase1_ground_truth/pseudo_ground_truth_S{1..8}.png
 
 ### Phase 2 — Universal encoder
 - [x] `feat(core): MLP dual-latent encoder with null embeddings` — core/networks.py with learnable theta_null / phi_null
 - [x] `test(core): null-embedding identity & dimension matrix` — None inputs map to identical null token; shapes correct for S1–S8
-- [x] `chore: Phase 2 latent-space plot` — viz_output/encoder_latent_S1_vs_S5.png
+- [x] `chore: Phase 2 latent-space plot` — viz_output/phase2_encoder/encoder_latent_S1_vs_S5.png
 
 ### Phase 3 — CNP
 - [x] `feat(core): CNP forward + Bernoulli-NLL loss` — core/surrogate_cnp.py (NOT BCE on X — see Math section)
 - [~] `feat(core): mixup augmentation` — **DEFERRED until real LEGEND data** (see decision note below)
 - [x] `feat: training loop & checkpoint format`
 - [x] `test(core): MAE(β, p) below per-scenario threshold` — pseudo-data driven
-- [x] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
+- [x] `chore: Phase 3 reconstruction plots` — viz_output/phase3_cnp/cnp_reconstruction_S{1..8}.png
 
 ### Phase 4 — MFGP
 - [x] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)
 - [x] `test(core): coverage 68/95/99.7 on held-out HF`
-- [x] `chore: Phase 4 posterior + QQ plots` — viz_output/mfgp_posterior_S{1..8}.png, mfgp_coverage_S*.png, mfgp_qq.png
+- [x] `chore: Phase 4 posterior + QQ plots` — viz_output/phase4_mfgp/mfgp_posterior_S{1..8}.png, mfgp_coverage_S*.png, mfgp_qq.png
 
 ### Phase 5 — Optimizer
 - [ ] `feat(core): IVR acquisition with constraint penalties` — core/optimizer.py
 - [ ] `feat: active-learning loop driver`
 - [ ] `test(core): variance shrinkage across iterations`
-- [ ] `chore: Phase 5 acquisition heatmaps` — viz_output/optimizer_step_*.png
+- [ ] `chore: Phase 5 acquisition heatmaps` — viz_output/phase5_optimizer/optimizer_step_*.png
 
 ### Cross-cutting
 - [ ] CI workflow (pytest + ruff)

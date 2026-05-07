@@ -1,6 +1,6 @@
 """Phase 2 visual evidence: encoder latent space and shape table.
 
-Produces two artifacts under ``viz_output/``:
+Produces two artifacts under ``viz_output/phase2_encoder/``:
 
 * ``encoder_shape_table.txt`` — a row per scenario S1..S8 showing the
   declared input dims and the resulting ``z_θ`` / ``z_φ`` tensor shapes.
@@ -33,7 +33,7 @@ from core.networks import build_encoder  # noqa: E402
 from data.pseudo_generator import PseudoDataGenerator, for_scenario  # noqa: E402
 from schemas.config import EncoderConfig  # noqa: E402
 
-OUT_DIR = Path("viz_output")
+OUT_DIR = Path("viz_output/phase2_encoder")
 
 
 def _make_config(latent_dim: int = 16) -> EncoderConfig:
@@ -133,7 +133,7 @@ def plot_latent_S1_vs_S5(out_path: Path, *, B: int = 64, seed: int = 0) -> None:
 
 
 def main() -> None:
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     write_shape_table(OUT_DIR / "encoder_shape_table.txt")
     plot_latent_S1_vs_S5(OUT_DIR / "encoder_latent_S1_vs_S5.png")
 

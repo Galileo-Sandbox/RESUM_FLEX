@@ -46,7 +46,7 @@ from schemas.config import (  # noqa: E402
 from schemas.data_models import InputMode  # noqa: E402
 from viz import plot_comparison_1d, plot_coverage_test  # noqa: E402
 
-OUT_DIR = Path("viz_output")
+OUT_DIR = Path("viz_output/phase4_mfgp")
 
 MFGP_SCENARIOS = ["S1", "S2", "S3", "S4", "S7", "S8"]
 CNP_STEPS = {"S1": 500, "S2": 800, "S3": 800, "S4": 1000, "S7": 600, "S8": 600}
@@ -261,7 +261,7 @@ def plot_qq(residuals_by_scenario: dict[str, np.ndarray], out: Path) -> None:
 
 
 def main() -> None:
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     coverage_summary: dict[str, dict[str, float]] = {}
     residuals_by_scenario: dict[str, np.ndarray] = {}
 

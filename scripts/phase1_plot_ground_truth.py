@@ -1,6 +1,6 @@
 """Generate Phase 1 ground-truth plots for every scenario in the validation matrix.
 
-Produces ``viz_output/pseudo_ground_truth_S{1..8}.png``. Each plot is one
+Produces ``viz_output/phase1_ground_truth/pseudo_ground_truth_S{1..8}.png``. Each plot is one
 informative view of the analytical ``t(θ, φ)`` for the scenario, with
 sample points overlaid where it helps:
 
@@ -29,7 +29,7 @@ import numpy as np  # noqa: E402
 from data.pseudo_generator import for_scenario  # noqa: E402
 from viz.dispatch import plot_field  # noqa: E402
 
-OUT_DIR = Path("viz_output")
+OUT_DIR = Path("viz_output/phase1_ground_truth")
 N_GRID = 80
 N_TRIALS = 32
 N_EVENTS = 256
@@ -236,7 +236,7 @@ THETA_1D_EXTRA_FOR = {"S1", "S3"}
 
 
 def main() -> None:
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, fn in PLOTTERS.items():
         out = OUT_DIR / f"pseudo_ground_truth_{name}.png"
         fn(out)
