@@ -196,6 +196,71 @@ def test_ivr_dim_mismatch_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ExpectedImprovementAcquisition.
+# ---------------------------------------------------------------------------
+
+
+def test_ei_score_non_negative_and_zero_at_incumbent() -> None:
+    """EI is ≥ 0 everywhere, and ≈ 0 at training points (μ ≈ y_known, σ ≈ 0)."""
+    from core import ExpectedImprovementAcquisition
+    mfgp = _toy_mfgp_1d()
+    bounds = BoxBounds(low=np.array([-1.0]), high=np.array([1.0]))
+    # Use a very negative incumbent for 'min' so EI is positive almost everywhere.
+    acq = ExpectedImprovementAcquisition(
+        mfgp, bounds, incumbent=10.0, target="min",
+    )
+    cands = bounds.grid_1d(31)
+    scores = acq.score(cands)
+    assert scores.shape == (31,)
+    assert (scores >= 0).all()
+    assert scores.max() > 0
+
+
+def test_ei_max_picks_high_mu_region() -> None:
+    """``target='max'`` should pick a candidate with relatively high μ.
+
+    The toy MFGP fits ``y = sin(πθ)`` — for max with a tiny incumbent
+    the EI argmax should land on the positive-μ side of the domain.
+    """
+    from core import ExpectedImprovementAcquisition
+    mfgp = _toy_mfgp_1d()
+    bounds = BoxBounds(low=np.array([-1.0]), high=np.array([1.0]))
+    acq = ExpectedImprovementAcquisition(
+        mfgp, bounds, incumbent=-10.0, target="max",
+    )
+    cands = bounds.grid_1d(51)
+    theta_next, _, _ = acq.best(cands)
+    mu, _ = mfgp.predict(theta_next.reshape(1, -1))
+    # μ at the chosen point should be positive (sin(πθ) peaks at θ=0.5).
+    assert mu[0] > 0.0
+
+
+def test_ei_min_picks_low_mu_region() -> None:
+    """``target='min'`` should pick a candidate with relatively low μ."""
+    from core import ExpectedImprovementAcquisition
+    mfgp = _toy_mfgp_1d()
+    bounds = BoxBounds(low=np.array([-1.0]), high=np.array([1.0]))
+    acq = ExpectedImprovementAcquisition(
+        mfgp, bounds, incumbent=10.0, target="min",
+    )
+    cands = bounds.grid_1d(51)
+    theta_next, _, _ = acq.best(cands)
+    mu, _ = mfgp.predict(theta_next.reshape(1, -1))
+    # μ at the chosen point should be negative (sin(πθ) min near θ=-0.5).
+    assert mu[0] < 0.0
+
+
+def test_ei_invalid_target_raises() -> None:
+    from core import ExpectedImprovementAcquisition
+    mfgp = _toy_mfgp_1d()
+    bounds = BoxBounds(low=np.array([-1.0]), high=np.array([1.0]))
+    with pytest.raises(ValueError, match="target"):
+        ExpectedImprovementAcquisition(
+            mfgp, bounds, incumbent=0.0, target="middle",
+        )
+
+
+# ---------------------------------------------------------------------------
 # simulate_at_theta.
 # ---------------------------------------------------------------------------
 

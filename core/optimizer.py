@@ -260,6 +260,129 @@ class IvrAcquisition:
         return theta_candidates[best_idx].copy(), float(scores[best_idx]), scores
 
 
+@dataclass
+class ExpectedImprovementAcquisition:
+    """Expected Improvement acquisition over a fitted MFGP.
+
+    For minimization (``target='min'``) with current incumbent
+    ``y_best`` and Gaussian posterior ``f(θ*) ~ N(μ, σ²)``:
+
+        EI(θ*) = (y_best − μ)·Φ(z) + σ·φ(z),   z = (y_best − μ) / σ
+
+    For maximization (``target='max'``):
+
+        EI(θ*) = (μ − y_best)·Φ(z) + σ·φ(z),   z = (μ − y_best) / σ
+
+    A small ``xi`` shift trades exploration vs exploitation (larger
+    ``xi`` → more exploratory). Default ``xi=0.0`` matches the textbook
+    formula. Φ, φ are the standard-normal CDF / PDF.
+
+    Unlike :class:`IvrAcquisition` (pure exploration), EI is an
+    exploitation-leaning acquisition: it concentrates probes where the
+    posterior predicts an optimum. Stars cluster near the predicted
+    optimum once σ is small, and explore high-σ regions while σ is
+    large — both governed by the same closed-form.
+
+    Parameters
+    ----------
+    mfgp
+        A fitted :class:`MultiFidelityGP`.
+    bounds
+        Box bounds on θ. Used only for filtering candidates.
+    incumbent
+        Current best observed value (in the y-space the GP predicts at
+        ``fidelity``). For our 3-fidelity setup the highest fidelity is
+        ``y_raw = m/N``; pass the appropriate min / max of the HF
+        observations.
+    target
+        ``'min'`` to find a minimum, ``'max'`` to find a maximum.
+    xi
+        Exploration trade-off shift. ``0.0`` is the default text-book
+        formulation.
+    fidelity
+        Fidelity level at which the GP posterior is queried (default:
+        highest, the y_raw target).
+    feasibility_fn
+        Optional ``(theta:[n,D]) -> bool[n]`` predicate; infeasible
+        candidates score ``0.0``.
+    """
+
+    mfgp: MultiFidelityGP
+    bounds: BoxBounds
+    incumbent: float
+    target: str = "max"
+    xi: float = 0.0
+    fidelity: int | None = None
+    feasibility_fn: Callable[[np.ndarray], np.ndarray] | None = None
+
+    def __post_init__(self) -> None:
+        if self.bounds.dim != self.mfgp.dim_theta:
+            raise ValueError(
+                f"bounds.dim={self.bounds.dim} != mfgp.dim_theta={self.mfgp.dim_theta}"
+            )
+        if self.target not in ("max", "min"):
+            raise ValueError(f"target must be 'max' or 'min', got {self.target!r}")
+
+    def score(self, theta_candidates: np.ndarray) -> np.ndarray:
+        """EI score per candidate (higher = better).
+
+        ``EI ≥ 0`` everywhere by construction; the standard-normal CDF
+        and PDF are both non-negative, and the formula combines them
+        linearly with non-negative coefficients.
+        """
+        if theta_candidates.ndim != 2 or theta_candidates.shape[1] != self.bounds.dim:
+            raise ValueError(
+                f"theta_candidates.shape={theta_candidates.shape}; "
+                f"expected (n, {self.bounds.dim})"
+            )
+        n = theta_candidates.shape[0]
+        feas = self.bounds.contains(theta_candidates)
+        if self.feasibility_fn is not None:
+            feas &= np.asarray(self.feasibility_fn(theta_candidates), dtype=bool)
+        if not feas.any():
+            return np.zeros(n)
+
+        feasible_idx = np.where(feas)[0]
+        feasible_theta = theta_candidates[feasible_idx]
+
+        mu, var = self.mfgp.predict(feasible_theta, fidelity=self.fidelity)
+        sigma = np.sqrt(np.clip(var, 0.0, None))
+
+        # Direction sign: minimization wants μ < incumbent;
+        # maximization wants μ > incumbent.
+        if self.target == "min":
+            improvement = (self.incumbent - self.xi) - mu
+        else:
+            improvement = mu - (self.incumbent + self.xi)
+
+        # Gaussian-EI closed form. Where σ ≈ 0 the analytical EI is
+        # exactly max(improvement, 0); we mirror that to dodge 0/0.
+        ei = np.zeros_like(mu)
+        positive_sigma = sigma > 1.0e-12
+        z = np.where(positive_sigma, improvement / np.where(positive_sigma, sigma, 1.0), 0.0)
+        # Standard-normal CDF / PDF without scipy dependency at call site.
+        from math import erf, sqrt as _sqrt
+        phi = np.exp(-0.5 * z * z) / _sqrt(2.0 * np.pi)
+        cdf = 0.5 * (1.0 + np.vectorize(erf)(z / _sqrt(2.0)))
+        ei_pos = improvement * cdf + sigma * phi
+        ei[positive_sigma] = np.clip(ei_pos[positive_sigma], 0.0, None)
+        ei[~positive_sigma] = np.clip(improvement[~positive_sigma], 0.0, None)
+
+        out = np.zeros(n)
+        out[feasible_idx] = ei
+        return out
+
+    def best(
+        self, theta_candidates: np.ndarray,
+    ) -> tuple[np.ndarray, float, np.ndarray]:
+        """Return ``(theta_next, best_score, all_scores)``."""
+        scores = self.score(theta_candidates)
+        # Even a fully-explored GP with σ ≈ 0 can have EI ≈ 0 across all
+        # candidates; in that case fall back to the closest tie.
+        best_idx = int(np.argmax(scores))
+        return theta_candidates[best_idx].copy(), float(scores[best_idx]), scores
+
+
 def integrated_variance(
     mfgp: MultiFidelityGP,
     bounds: BoxBounds,
@@ -370,11 +493,22 @@ class ActiveLearningStep:
 
 @dataclass
 class ActiveLearningLoop:
-    """Drives the IVR active-learning iteration.
+    """Drives an active-learning iteration over a fitted MFGP.
+
+    Two acquisition modes are supported:
+
+    * ``acquisition='ivr'`` (default) — pure exploration, picks the θ
+      that minimizes integrated posterior variance. Direction-agnostic;
+      the ``target`` flag is ignored at acquisition time.
+    * ``acquisition='ei'`` — Expected Improvement, exploitation-leaning.
+      The ``target`` flag (``'max'`` or ``'min'``) controls the
+      direction of optimization; the incumbent for EI is the running
+      best of ``Y_hf_raw`` in the appropriate direction.
 
     Each step:
 
-    1. Score IVR over a candidate set (grid for dim ≤ 2, LHS otherwise).
+    1. Score the chosen acquisition over a candidate set (grid for dim
+       ≤ 2, uniform sample for higher-dim).
     2. Query the pseudo-truth at ``θ_next`` for one fresh HF trial.
     3. Append ``β̄`` and ``y_raw`` to the MFGP's HF datasets and refit.
     4. Record an :class:`ActiveLearningStep` with the surfaces & metrics.
@@ -394,6 +528,9 @@ class ActiveLearningLoop:
     n_candidates_per_axis: int = 50
     seed: int = 0
     refit_n_restarts: int = 5
+    acquisition: str = "ivr"
+    target: str = "max"
+    ei_xi: float = 0.0
     _step: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
@@ -401,6 +538,12 @@ class ActiveLearningLoop:
             raise ValueError(
                 f"bounds.dim={self.bounds.dim} != mfgp.dim_theta={self.mfgp.dim_theta}"
             )
+        if self.acquisition not in ("ivr", "ei"):
+            raise ValueError(
+                f"acquisition must be 'ivr' or 'ei', got {self.acquisition!r}"
+            )
+        if self.target not in ("max", "min"):
+            raise ValueError(f"target must be 'max' or 'min', got {self.target!r}")
 
     def _make_candidates(
         self,
@@ -424,6 +567,24 @@ class ActiveLearningLoop:
         n = self.n_candidates_per_axis ** 2
         return self.bounds.sample_uniform(n, rng), None, None
 
+    def _build_acquisition(self):
+        """Build a fresh acquisition instance over the current MFGP."""
+        if self.acquisition == "ivr":
+            return IvrAcquisition(
+                self.mfgp, self.bounds,
+                n_mc_samples=self.n_mc_samples, fidelity=None,
+                seed=self.seed + self._step,
+            )
+        # EI — incumbent is the current best of Y_hf_raw in the target's
+        # direction (this is the y-space the GP predicts at the highest
+        # fidelity, which matches what we'd compare against).
+        y_hf = self.data["Y_hf_raw"].ravel()
+        incumbent = float(y_hf.min() if self.target == "min" else y_hf.max())
+        return ExpectedImprovementAcquisition(
+            self.mfgp, self.bounds, incumbent=incumbent,
+            target=self.target, xi=self.ei_xi, fidelity=None,
+        )
+
     def step(self) -> ActiveLearningStep:
         """Run one acquire → query → refit cycle."""
         iv_before = integrated_variance(
@@ -431,11 +592,7 @@ class ActiveLearningLoop:
             n_mc_samples=2000, fidelity=None, seed=self.seed,
         )
         cands, axes, shape = self._make_candidates()
-        acq = IvrAcquisition(
-            self.mfgp, self.bounds,
-            n_mc_samples=self.n_mc_samples, fidelity=None,
-            seed=self.seed + self._step,
-        )
+        acq = self._build_acquisition()
         theta_next, _, scores = acq.best(cands)
         _, var_cand = self.mfgp.predict(cands, fidelity=None)
         sigma_cand = np.sqrt(var_cand)

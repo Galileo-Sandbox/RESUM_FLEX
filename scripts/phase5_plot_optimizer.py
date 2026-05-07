@@ -97,7 +97,7 @@ def _train_cfg(name: str) -> TrainingConfig:
 # ---------------------------------------------------------------------------
 
 
-def _train_pipeline(name: str):
+def _train_pipeline(name: str, n_hf_trials: int = N_HF_TRIALS):
     """CNP + initial 3-fidelity MFGP, ready for active learning."""
     torch.manual_seed(0)
     np.random.seed(0)
@@ -108,7 +108,7 @@ def _train_pipeline(name: str):
     data = prepare_mfgp_datasets(
         cnp, gen,
         n_lf_trials=N_LF_TRIALS, n_lf_events=N_LF_EVENTS,
-        n_hf_trials=N_HF_TRIALS, n_hf_events=N_HF_EVENTS,
+        n_hf_trials=n_hf_trials, n_hf_events=N_HF_EVENTS,
         seed=0,
     )
     mfgp = fit_mfgp_three_fidelity(data, n_restarts=REFIT_N_RESTARTS)
@@ -175,6 +175,7 @@ def _plot_step_1d(
     *,
     target: str,
     mu_after: np.ndarray,
+    acquisition: str = "ivr",
 ) -> None:
     grid = record.grid_axes[0]
     sigma = record.sigma
@@ -244,7 +245,10 @@ def _plot_step_1d(
         loc="best", fontsize=7,
     )
 
-    ax_a.plot(grid, acq, color="C3", linewidth=2.0, label="IVR acquisition")
+    acq_label = {"ivr": "IVR acquisition", "ei": "EI acquisition"}.get(
+        acquisition, "acquisition"
+    )
+    ax_a.plot(grid, acq, color="C3", linewidth=2.0, label=acq_label)
     ax_a.axvline(theta_true_opt, color="C0", linestyle=":", linewidth=1.6,
                  label=f"true {target_label}")
     ax_a.axvline(theta_pred_opt, color="C3", linestyle="-.", linewidth=1.4,
@@ -258,7 +262,7 @@ def _plot_step_1d(
         color="red", s=180, marker="*", zorder=5, label="θ_next",
     )
     ax_a.set_xlabel("θ"); ax_a.set_ylabel("acquisition")
-    ax_a.set_title("IVR acquisition surface")
+    ax_a.set_title(f"{acq_label} surface")
     ax_a.legend(loc="best", fontsize=7)
     ax_a.grid(alpha=0.3)
 
@@ -276,6 +280,7 @@ def _plot_step_2d(
     *,
     target: str,
     mu_after: np.ndarray,
+    acquisition: str = "ivr",
 ) -> None:
     ax0, ax1 = record.grid_axes
     sigma = record.sigma
@@ -299,7 +304,7 @@ def _plot_step_2d(
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
     for ax, arr, panel_title, cmap in [
         (axes[0], sigma, "posterior σ(θ)", "viridis"),
-        (axes[1], acq, "IVR acquisition", "magma"),
+        (axes[1], acq, {"ivr": "IVR acquisition", "ei": "EI acquisition"}.get(acquisition, "acquisition"), "magma"),
     ]:
         im = ax.imshow(arr, origin="lower", extent=extent, aspect="auto", cmap=cmap)
         ax.scatter(
@@ -633,9 +638,16 @@ def _gap_and_mae(
     return gap, mae, theta_true, theta_pred
 
 
-def _run_scenario(name: str, target: str) -> dict[str, float]:
-    print(f"  ── {name} ──")
-    gen, cnp, mfgp, data = _train_pipeline(name)
+def _run_scenario(
+    name: str,
+    *,
+    target: str,
+    acquisition: str = "ivr",
+    n_hf_trials: int = N_HF_TRIALS,
+    out_dir: Path = OUT_DIR,
+) -> dict[str, float]:
+    print(f"  ── {name} (acq={acquisition}, target={target}, n_hf_init={n_hf_trials}) ──")
+    gen, cnp, mfgp, data = _train_pipeline(name, n_hf_trials=n_hf_trials)
     bounds = BoxBounds(
         low=np.full(gen.dim_theta, -1.0),
         high=np.full(gen.dim_theta, 1.0),
@@ -664,6 +676,7 @@ def _run_scenario(name: str, target: str) -> dict[str, float]:
         n_hf_events=N_HF_EVENTS, n_mc_samples=N_MC_SAMPLES,
         n_candidates_per_axis=N_CAND_PER_AXIS,
         seed=0, refit_n_restarts=REFIT_N_RESTARTS,
+        acquisition=acquisition, target=target,
     )
 
     # Run AL one step at a time so we can grab post-step μ snapshots
@@ -687,16 +700,22 @@ def _run_scenario(name: str, target: str) -> dict[str, float]:
     for k, (rec, mu_after) in enumerate(
         zip(records, mu_afters, strict=True), start=1,
     ):
-        out = OUT_DIR / f"optimizer_{name}_step{k}.png"
+        out = out_dir / f"optimizer_{name}_step{k}.png"
         title = (
             f"{name} — AL step {k}/{N_AL_STEPS}  "
             f"(IV {rec.integrated_variance_before:.2e} → "
             f"{rec.integrated_variance_after:.2e})"
         )
         if gen.dim_theta == 1:
-            _plot_step_1d(gen, rec, out, title, target=target, mu_after=mu_after)
+            _plot_step_1d(
+                gen, rec, out, title,
+                target=target, mu_after=mu_after, acquisition=acquisition,
+            )
         else:
-            _plot_step_2d(gen, rec, out, title, target=target, mu_after=mu_after)
+            _plot_step_2d(
+                gen, rec, out, title,
+                target=target, mu_after=mu_after, acquisition=acquisition,
+            )
         print(f"  wrote {out}")
 
     # Final-state trajectory + metrics plots.
@@ -704,7 +723,7 @@ def _run_scenario(name: str, target: str) -> dict[str, float]:
     final_sigma_flat = np.sqrt(final_var_flat)
     al_thetas_arr = np.stack(al_thetas, axis=0)
 
-    traj_path = OUT_DIR / f"optimizer_{name}_trajectory.png"
+    traj_path = out_dir / f"optimizer_{name}_trajectory.png"
     if gen.dim_theta == 1:
         _plot_trajectory_1d(
             name, gen, bounds, initial_hf_theta, al_thetas_arr,
@@ -726,11 +745,11 @@ def _run_scenario(name: str, target: str) -> dict[str, float]:
         )
     print(f"  wrote {traj_path}")
 
-    metrics_path = OUT_DIR / f"optimizer_{name}_metrics.png"
+    metrics_path = out_dir / f"optimizer_{name}_metrics.png"
     _plot_metrics_trajectory(name, gap_history, mae_history, metrics_path)
     print(f"  wrote {metrics_path}")
 
-    iv_path = OUT_DIR / f"optimizer_{name}_iv.png"
+    iv_path = out_dir / f"optimizer_{name}_iv.png"
     _plot_iv_trace(name, iv0, records, iv_path)
     print(f"  wrote {iv_path}")
 
@@ -765,13 +784,38 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--target", choices=["max", "min"], default="max",
         help=(
-            "Optimization target for annotating the true / predicted "
-            "optimum. The Gaussian-bump pseudo-truths used here have a "
-            "*maximum* at θ_peak (the rare-event triggering rate they "
-            "model peaks at the design we're hunting for), so the "
-            "default is 'max'. IVR itself is direction-agnostic — this "
-            "knob only changes which point is highlighted as the "
-            "true / predicted optimum on the plots."
+            "Optimization target. With ``--acquisition ivr`` (default), "
+            "this only controls which point is annotated as the true / "
+            "predicted optimum on the plots — IVR itself is "
+            "direction-agnostic. With ``--acquisition ei``, this also "
+            "controls the direction of optimization in the EI formula."
+        ),
+    )
+    parser.add_argument(
+        "--acquisition", choices=["ivr", "ei"], default="ivr",
+        help=(
+            "Active-learning acquisition. 'ivr' (default) is pure "
+            "exploration — minimizes integrated posterior variance. "
+            "'ei' is Expected Improvement, exploitation-leaning — "
+            "stars cluster near the predicted optimum once σ shrinks."
+        ),
+    )
+    parser.add_argument(
+        "--n-initial-hf", type=int, default=N_HF_TRIALS,
+        help=(
+            f"Number of HF trials in the initial dataset before AL "
+            f"begins (default: {N_HF_TRIALS}). Lower values = more "
+            f"uncertain initial fit = clearer AL signal, but the GP "
+            f"refits become numerically less stable."
+        ),
+    )
+    parser.add_argument(
+        "--out-dir", default=str(OUT_DIR),
+        help=(
+            f"Directory where plots are written. Default: "
+            f"{OUT_DIR}. Use a separate subfolder when running "
+            f"non-default configs (e.g. EI / target=min stress test) "
+            f"so the IVR baseline output is preserved."
         ),
     )
     args = parser.parse_args(argv)
@@ -781,11 +825,17 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(
             f"unknown scenario(s) {unknown}; valid: {OPTIMIZER_SCENARIOS}"
         )
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     summary: dict[str, dict] = {}
     for name in requested:
-        summary[name] = _run_scenario(name, target=args.target)
+        summary[name] = _run_scenario(
+            name,
+            target=args.target,
+            acquisition=args.acquisition,
+            n_hf_trials=args.n_initial_hf,
+            out_dir=out_dir,
+        )
 
     print("\n  IV summary (start / final / min, lower is better):")
     print("    scenario   start       final       min        min/start")
