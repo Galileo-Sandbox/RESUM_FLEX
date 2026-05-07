@@ -10,8 +10,10 @@ from core.surrogate_cnp import (
 )
 from core.mfgp_pipeline import (
     evaluate_mfgp_coverage,
+    evaluate_mfgp_coverage_from_batch,
     fit_mfgp_three_fidelity,
     prepare_mfgp_datasets,
+    prepare_mfgp_datasets_from_batches,
 )
 from core.optimizer import (
     ActiveLearningLoop,
@@ -23,7 +25,7 @@ from core.optimizer import (
     posterior_covariance,
     simulate_at_theta,
 )
-from core.surrogate_mfgp import MultiFidelityGP
+from core.surrogate_mfgp import MultiFidelityGP, load_mfgp, save_mfgp
 from core.training import (
     TrainingHistory,
     cnp_trial_predictive,
@@ -53,12 +55,16 @@ __all__ = [
     "cnp_trial_predictive",
     "evaluate_mae",
     "evaluate_mfgp_coverage",
+    "evaluate_mfgp_coverage_from_batch",
     "fit_mfgp_three_fidelity",
     "integrated_variance",
     "load_checkpoint",
+    "load_mfgp",
     "posterior_covariance",
     "prepare_mfgp_datasets",
+    "prepare_mfgp_datasets_from_batches",
     "save_checkpoint",
+    "save_mfgp",
     "simulate_at_theta",
     "split_context_target",
     "train_cnp",

@@ -187,3 +187,41 @@ def test_fit_and_predict_2d_theta() -> None:
     assert mean.shape == (20,)
     assert var.shape == (20,)
     assert np.all(var >= 0)
+
+
+# ---------------------------------------------------------------------------
+# save_mfgp / load_mfgp.
+# ---------------------------------------------------------------------------
+
+
+def test_save_load_roundtrip_predicts_identically(tmp_path) -> None:
+    from core import load_mfgp, save_mfgp
+    X_lf, Y_lf, X_hf, Y_hf = _toy_two_fidelity_data()
+    gp = MultiFidelityGP(n_fidelities=2, dim_theta=1).fit(
+        [X_lf, X_hf], [Y_lf, Y_hf], n_restarts=2,
+    )
+    path = save_mfgp(tmp_path / "mfgp.pkl", gp)
+    assert path.exists()
+    gp2 = load_mfgp(path)
+    X_test = np.linspace(-1.0, 1.0, 9).reshape(-1, 1)
+    mu1, var1 = gp.predict(X_test)
+    mu2, var2 = gp2.predict(X_test)
+    np.testing.assert_allclose(mu1, mu2)
+    np.testing.assert_allclose(var1, var2)
+
+
+def test_save_unfitted_raises(tmp_path) -> None:
+    from core import save_mfgp
+    gp = MultiFidelityGP(n_fidelities=2, dim_theta=1)
+    with pytest.raises(RuntimeError, match="unfitted"):
+        save_mfgp(tmp_path / "x.pkl", gp)
+
+
+def test_load_wrong_type_raises(tmp_path) -> None:
+    import pickle
+    from core import load_mfgp
+    path = tmp_path / "wrong.pkl"
+    with open(path, "wb") as f:
+        pickle.dump({"not": "an mfgp"}, f)
+    with pytest.raises(TypeError, match="MultiFidelityGP"):
+        load_mfgp(path)

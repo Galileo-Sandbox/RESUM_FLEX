@@ -11,9 +11,15 @@ RESuM stack is:
 with the recursion ``f_{i+1}(θ) = ρ_i · f_i(θ) + δ_i(θ)`` learned by
 co-kriging. The module is **numpy / GPy only** — no torch import here,
 per the project's hard decoupling rule.
+
+A fitted MFGP can be persisted with :func:`save_mfgp` / :func:`load_mfgp`
+— pickle-backed, so use only with files from trusted sources.
 """
 
 from __future__ import annotations
+
+import pickle
+from pathlib import Path
 
 import numpy as np
 import GPy
@@ -153,3 +159,50 @@ class MultiFidelityGP:
                 f"fidelity must be in [0, {self.n_fidelities - 1}], got {fidelity}"
             )
         return fidelity
+
+
+# ---------------------------------------------------------------------------
+# Persistence.
+# ---------------------------------------------------------------------------
+
+
+def save_mfgp(path: str | Path, mfgp: MultiFidelityGP) -> Path:
+    """Pickle a fitted :class:`MultiFidelityGP` to ``path``.
+
+    Captures the full object including the underlying GPy model state,
+    so :func:`load_mfgp` returns a model that produces identical
+    ``predict`` outputs without needing to refit.
+
+    .. warning::
+       Pickle is unsafe to load from untrusted sources. Use only with
+       files you produced (or trust the producer of).
+
+    Returns the resolved :class:`Path` for chaining.
+    """
+    if not mfgp.is_fitted:
+        raise RuntimeError("cannot save an unfitted MFGP; call .fit() first")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(mfgp, f)
+    return path
+
+
+def load_mfgp(path: str | Path) -> MultiFidelityGP:
+    """Load a pickled :class:`MultiFidelityGP` from ``path``.
+
+    Validates that the unpickled object is a fitted ``MultiFidelityGP``
+    so a wrong-type file fails loudly instead of returning silently
+    broken state.
+    """
+    path = Path(path)
+    with open(path, "rb") as f:
+        obj = pickle.load(f)
+    if not isinstance(obj, MultiFidelityGP):
+        raise TypeError(
+            f"file {path} did not contain a MultiFidelityGP "
+            f"(got {type(obj).__name__})"
+        )
+    if not obj.is_fitted:
+        raise RuntimeError(f"loaded MFGP from {path} is not fitted")
+    return obj
