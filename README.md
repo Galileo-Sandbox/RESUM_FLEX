@@ -293,51 +293,73 @@ The validator throws on shape / mode mismatches at construction time.
 #### Normalize before you build the batch (important)
 
 The CNP encoder is an MLP that fits the **raw numerical input**. When
-`θ` (or `φ`) components live on very different scales — e.g. Energy
-∈ [500, 3000] keV alongside Threshold ∈ [0, 1] — gradient imbalance
-makes the encoder *scale-blind*: it tracks the high-magnitude
-dimension and ignores the small one (often by a factor of 100× or
-more, even after long training). The MFGP can compensate via ARD
-lengthscales; the CNP cannot.
+`θ` (or `φ`) components have ranges that differ by ≥ ~10× — *whatever
+the units* — gradient imbalance makes the encoder *scale-blind*: it
+locks onto the high-magnitude dimension and ignores the small one
+(often by a factor of 100× in effective gradient flow, even after
+long training). The MFGP can compensate via ARD lengthscales; the
+CNP cannot.
 
-**Always normalize physical inputs before building the batch.** Use
-`core.scaling.MinMaxScaler` and persist it alongside your CNP /
-MFGP checkpoint so predictions can be inverse-transformed back to
-physical units later.
+**Always normalize before building the batch when feature ranges
+differ.** Use `core.MinMaxScaler` and persist it alongside your CNP /
+MFGP checkpoint so predictions can be inverse-transformed back to the
+original units later. **Any numerical ranges are supported** — the
+scaler simply maps each feature's `[low, high]` linearly onto
+`[-1, 1]` (or any target interval you choose).
+
+Three equivalent ways to construct it:
 
 ```python
 from core import MinMaxScaler
 
-# Preferred: known physical bounds.
+# 1. Preferred — known per-feature bounds (any numerical ranges).
 theta_scaler = MinMaxScaler.from_bounds(
-    low=[500.0, 0.0],     # E_min,  T_min
-    high=[3000.0, 1.0],   # E_max,  T_max
+    low=theta_low,             # 1-D array of length D_θ
+    high=theta_high,            # 1-D array of length D_θ
 )
-# Fallback: fit from data.
-# theta_scaler = MinMaxScaler.fit(theta_lf)
 
-theta_lf_scaled = theta_scaler.transform(theta_lf)
+# 2. Fit from data when bounds aren't known a priori.
+theta_scaler = MinMaxScaler.fit(theta_train)
 
-lf_batch = StandardBatch(
-    mode=InputMode.FULL,
-    theta=theta_lf_scaled,
-    phi=phi_lf,                   # apply a separate scaler to φ if needed
-    labels=labels_lf.astype(np.int8),
+# 3. Pick a different output interval (default is [-1, 1]).
+theta_scaler = MinMaxScaler.from_bounds(
+    low=theta_low, high=theta_high,
+    target_low=0.0, target_high=1.0,
 )
 ```
 
-If you skip this step on imbalanced inputs, the framework emits a
-`ScaleImbalanceWarning` at `StandardBatch` construction. The threshold
-is a 10× per-feature range gap — see `schemas.data_models.SCALE_IMBALANCE_THRESHOLD`.
-
-When you later predict at a new θ, scale the query with the **same**
-scaler and inverse-transform any θ-shaped outputs (e.g. an
-`active_learning_loop.records[k].theta_next`) back to physical units:
+Concrete examples — the same call works for any ranges:
 
 ```python
+# Physical units that span vastly different magnitudes:
+sc = MinMaxScaler.from_bounds(low=[500.0, 0.0],   high=[3000.0, 1.0])
+
+# Negative ranges, mixed scales:
+sc = MinMaxScaler.from_bounds(low=[-50, 1e-6],    high=[50, 1e3])
+
+# 4-D design space:
+sc = MinMaxScaler.from_bounds(low=[0, 0, 0, -π],  high=[10, 100, 1, π])
+```
+
+Apply, build the batch, train, predict, invert:
+
+```python
+theta_scaled = theta_scaler.transform(theta_raw)            # forward
+lf_batch = StandardBatch(mode=InputMode.FULL,
+                          theta=theta_scaled,
+                          phi=phi_lf,                        # use a separate scaler
+                          labels=labels_lf.astype(np.int8))   #   for φ if needed
+
+# At predict time, scale the query with the *same* scaler:
 mu, var = mfgp.predict(theta_scaler.transform(theta_query_raw))
+
+# Inverse-transform any θ-shaped output (e.g. an AL record) back to original units:
 theta_next_raw = theta_scaler.inverse_transform(record.theta_next.reshape(1, -1))[0]
 ```
+
+If you skip normalization on imbalanced inputs, the framework emits a
+`ScaleImbalanceWarning` at `StandardBatch` construction. The threshold
+is a 10× per-feature range gap — see `schemas.data_models.SCALE_IMBALANCE_THRESHOLD`.
 
 ### 2. Train the CNP
 

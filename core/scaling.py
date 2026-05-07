@@ -1,30 +1,36 @@
-"""Feature scaling utilities for real-world physical inputs.
+"""Feature scaling utilities for arbitrary input ranges.
 
-The MFGP (Phase 4) and especially the CNP encoder (Phase 2/3) assume
-``θ`` and ``φ`` components live on a similar numerical scale across
-dimensions. When physical inputs span very different ranges — e.g.
-Energy ∈ [500, 3000] keV alongside Threshold ∈ [0, 1] — the gradient
-imbalance makes the MLP encoder *scale-blind*: it locks onto the
-high-magnitude dimension and ignores the small one (often by 10²–10³ ×).
-The MFGP can compensate via ARD lengthscales, but the CNP cannot
-without explicit normalization.
+Generic min-max scaling. The MFGP (Phase 4) and especially the CNP
+encoder (Phase 2/3) assume ``θ`` and ``φ`` components live on a
+similar numerical scale across dimensions. When two features have
+ranges that differ by ≥ ~10× (whether 500 vs 1, 1e-6 vs 1, or
+0.001 vs 100), the gradient imbalance makes the MLP encoder
+*scale-blind*: it locks onto the high-magnitude dimension and
+ignores the small one. The MFGP can compensate via ARD
+lengthscales, but the CNP cannot without explicit normalization.
 
 This module provides :class:`MinMaxScaler` for explicit, reversible
-input scaling. Two construction paths:
+input scaling. **Any numerical input ranges are supported** — the
+scaler simply maps each feature's [feature_min, feature_max]
+linearly onto a target interval (default ``[-1, 1]``).
 
-* :meth:`MinMaxScaler.fit` — fit min/max from a representative array.
-* :meth:`MinMaxScaler.from_bounds` — build from known physical
-  bounds (recommended when the design space is constrained a priori).
+Two construction paths:
+
+* :meth:`MinMaxScaler.fit` — fit per-feature min/max from a
+  representative array (use when bounds are unknown).
+* :meth:`MinMaxScaler.from_bounds` — build from known bounds
+  (recommended when the design space is constrained a priori, e.g.
+  by a physical measurement range or a hyperparameter sweep envelope).
 
 The scaler operates on the *last* axis of any array, so it works
 uniformly for ``θ`` ``[B, D]`` and ``φ`` ``[B, N, D]``. Apply it
 *before* constructing :class:`schemas.data_models.StandardBatch`, and
 keep it alongside your CNP / MFGP checkpoint so predictions can be
-inverse-transformed back to physical units.
+inverse-transformed back to original units later.
 
 Recommended workflow::
 
-    theta_scaler = MinMaxScaler.from_bounds(low=[500.0, 0.0], high=[3000.0, 1.0])
+    theta_scaler = MinMaxScaler.from_bounds(low=theta_low, high=theta_high)
     theta_scaled = theta_scaler.transform(theta_raw)
     batch = StandardBatch(mode=..., theta=theta_scaled, phi=..., labels=...)
     # ... train CNP, fit MFGP ...
@@ -127,11 +133,17 @@ class MinMaxScaler:
         target_low: float = -1.0,
         target_high: float = 1.0,
     ) -> "MinMaxScaler":
-        """Build a scaler from known physical bounds.
+        """Build a scaler from known per-feature bounds.
 
-        Preferred when the design space is constrained a priori (e.g.
-        Energy ∈ [500, 3000] keV, Threshold ∈ [0, 1]) — fitting on data
-        could yield a scaler narrower than the actual feasible region.
+        Preferred when the design space is constrained a priori — by a
+        physical measurement range, a sweep envelope, or any other
+        domain knowledge. Fitting on data via :meth:`fit` can yield a
+        scaler narrower than the actual feasible region, which then
+        clips queries that lie inside the design space but outside the
+        observed sample.
+
+        ``low`` and ``high`` are 1-D sequences of length ``D`` (the
+        feature axis); any numerical ranges are supported.
         """
         return cls(
             feature_min=np.asarray(low, dtype=float),
