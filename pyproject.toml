@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Modular refactor of RESuM: Rare Event Surrogate Model with universal input handling."
 requires-python = ">=3.10"
 dependencies = [
-    "numpy>=1.24",
+    "numpy>=1.24,<2.0",
     "pydantic>=2.5",
     "pyyaml>=6.0",
     "torch>=2.0",
@@ -35,3 +35,10 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
+filterwarnings = [
+    # GPy / paramz ship LaTeX docstrings that trip Python 3.12's stricter
+    # SyntaxWarning. Not our problem.
+    "ignore::SyntaxWarning",
+    "ignore::DeprecationWarning:paramz.*",
+    "ignore::DeprecationWarning:GPy.*",
+]

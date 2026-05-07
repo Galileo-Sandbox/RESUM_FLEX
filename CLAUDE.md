@@ -190,7 +190,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `chore: Phase 3 reconstruction plots` — viz_output/cnp_reconstruction_S{1..8}.png
 
 ### Phase 4 — MFGP
-- [ ] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)
+- [x] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)
 - [ ] `test(core): coverage 68/95/99.7 on held-out HF`
 - [ ] `chore: Phase 4 posterior + QQ plots` — viz_output/mfgp_posterior_1d.png, viz_output/mfgp_qq.png
 

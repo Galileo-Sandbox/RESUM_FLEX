@@ -8,6 +8,7 @@ from core.surrogate_cnp import (
     cnp_loss,
     split_context_target,
 )
+from core.surrogate_mfgp import MultiFidelityGP
 from core.training import (
     TrainingHistory,
     cnp_trial_predictive,
@@ -23,6 +24,7 @@ __all__ = [
     "ConditionalNeuralProcess",
     "ContextPointEncoder",
     "MLPEncoder",
+    "MultiFidelityGP",
     "TrainingHistory",
     "UniversalEncoder",
     "build_cnp",
