@@ -191,7 +191,7 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 
 ### Phase 4 — MFGP
 - [x] `feat(core): MFGP co-kriging via Emukit/GPy` — core/surrogate_mfgp.py (no torch import here)
-- [ ] `test(core): coverage 68/95/99.7 on held-out HF`
+- [x] `test(core): coverage 68/95/99.7 on held-out HF`
 - [ ] `chore: Phase 4 posterior + QQ plots` — viz_output/mfgp_posterior_1d.png, viz_output/mfgp_qq.png
 
 ### Phase 5 — Optimizer
