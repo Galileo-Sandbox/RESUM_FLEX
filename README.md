@@ -19,10 +19,10 @@ ideas into a modular, dimension-flexible, universal-input architecture.
 | 1 | Pseudo-data generator with analytical `t(θ, φ)` + 8-scenario plots | ✅ |
 | 2 | Universal encoder with learnable null embeddings (PyTorch) | ✅ |
 | 3 | CNP training, evaluation, checkpoints, reconstruction & coverage plots | ✅ |
-| 4 | MFGP co-kriging via Emukit/GPy | ⏳ |
-| 5 | IVR active-learning optimizer | ⏳ |
+| 4 | MFGP co-kriging via Emukit/GPy + held-out coverage gate | ✅ |
+| 5 | IVR active-learning optimizer + variance-shrinkage gate | ✅ |
 
-132 tests pass. See `CLAUDE.md` for the full architecture brief, math
+152 tests pass. See `CLAUDE.md` for the full architecture brief, math
 reference, and the per-phase visualization plan.
 
 ## Layout
@@ -35,6 +35,9 @@ RESUM_FLEX/
 ├── core/              compute modules
 │   ├── networks.py       Universal encoder + null embeddings (PyTorch)
 │   ├── surrogate_cnp.py  CNP forward, Bernoulli-NLL loss, ctx/target split
+│   ├── surrogate_mfgp.py 3-fidelity recursive co-kriging via Emukit/GPy (no torch)
+│   ├── mfgp_pipeline.py  CNP → MFGP bridge: prepare datasets, fit, coverage eval
+│   ├── optimizer.py      IVR acquisition + active-learning loop (BoxBounds, IvrAcquisition, ActiveLearningLoop)
 │   └── training.py       train_cnp, evaluate_mae, cnp_trial_predictive, checkpoints
 ├── data/              synthetic data
 │   └── pseudo_generator.py   GaussianBumpTruth + PseudoDataGenerator + for_scenario()
@@ -43,7 +46,9 @@ RESUM_FLEX/
 ├── scripts/           runnable end-to-end pipelines
 │   ├── phase1_plot_ground_truth.py     pseudo-data plots over S1..S8
 │   ├── phase2_plot_latent.py           encoder null-token PCA + shape table
-│   └── phase3_plot_reconstruction.py   CNP train + reconstruction + coverage
+│   ├── phase3_plot_reconstruction.py   CNP train + reconstruction + coverage
+│   ├── phase4_plot_mfgp.py             MFGP posterior + coverage + Q-Q
+│   └── phase5_plot_optimizer.py        IVR acquisition + IV-trace per scenario
 ├── tests/             pytest (no real-data fixtures; everything synthetic)
 ├── config.yaml        all hyperparameters
 ├── pyproject.toml     deps + ruff/pytest config
@@ -199,9 +204,10 @@ python scripts/phase1_plot_ground_truth.py        # writes viz_output/phase1_gro
 python scripts/phase2_plot_latent.py              # writes viz_output/phase2_encoder/*
 python scripts/phase3_plot_reconstruction.py      # writes viz_output/phase3_cnp/*.png
 python scripts/phase4_plot_mfgp.py                # writes viz_output/phase4_mfgp/*.png
+python scripts/phase5_plot_optimizer.py           # writes viz_output/phase5_optimizer/*.png
 ```
 
-`viz_output/` is in `.gitignore` — plots are build products, not source. Each phase writes to its own subfolder (`phase1_ground_truth/`, `phase2_encoder/`, `phase3_cnp/`, `phase4_mfgp/`).
+`viz_output/` is in `.gitignore` — plots are build products, not source. Each phase writes to its own subfolder (`phase1_ground_truth/`, `phase2_encoder/`, `phase3_cnp/`, `phase4_mfgp/`, `phase5_optimizer/`).
 
 ## Configuration
 

@@ -102,10 +102,12 @@ Apply the **comparison rule**:
 - Pass: σ band narrow near HF points, wider in gaps; numerical coverage on holdout approaches 68 / 95 / 99.7%.
 
 ### Phase 5 — IVR optimizer
-File(s): `viz_output/phase5_optimizer/optimizer_step_{1..N}.png`
-- 2D θ: heatmap of the IVR acquisition surface.
+File(s): `viz_output/phase5_optimizer/optimizer_{S}_step{1..N}.png`, `viz_output/phase5_optimizer/optimizer_{S}_iv.png`
+- 2D θ: side-by-side heatmaps of posterior σ(θ) and the IVR acquisition surface.
+- 1D θ: side-by-side line plots of σ(θ) (with analytical t̄(θ) overlaid) and acquisition.
 - Overlay all previously-sampled θ as dots, the next θ as a red star.
-- Cross-check: the red star sits in the region with highest σ from Phase 4.
+- Cross-check: the red star sits in the region with high σ.
+- IV-trace plot per scenario: integrated posterior variance across active-learning steps must trend downward.
 - Pass: across iterations the posterior σ band visibly shrinks across Θ.
 
 | Phase | Output file | What to look for |
@@ -113,7 +115,7 @@ File(s): `viz_output/phase5_optimizer/optimizer_step_{1..N}.png`
 | 1 | `pseudo_ground_truth_*.png` | Probability map looks physical |
 | 3 | `cnp_reconstruction_S{1..8}.png` | Predicted β tracks ground-truth p |
 | 4 | `mfgp_posterior_1d.png`, `mfgp_qq.png` | μ goes through data; σ realistic; coverage 68/95/99.7% |
-| 5 | `optimizer_step_*.png` | Red star in high-σ region; band shrinks each step |
+| 5 | `optimizer_{S}_step*.png`, `optimizer_{S}_iv.png` | Red star in high-σ region; integrated variance shrinks across steps |
 
 ## Phased Implementation Plan
 
@@ -195,10 +197,9 @@ Each phase ships in small, reviewable commits — never one mega-commit. Plot ar
 - [x] `chore: Phase 4 posterior + QQ plots` — viz_output/phase4_mfgp/mfgp_posterior_S{1..8}.png, mfgp_coverage_S*.png, mfgp_qq.png
 
 ### Phase 5 — Optimizer
-- [ ] `feat(core): IVR acquisition with constraint penalties` — core/optimizer.py
-- [ ] `feat: active-learning loop driver`
-- [ ] `test(core): variance shrinkage across iterations`
-- [ ] `chore: Phase 5 acquisition heatmaps` — viz_output/phase5_optimizer/optimizer_step_*.png
+- [x] `feat(core): IVR acquisition + active-learning loop driver` — core/optimizer.py (BoxBounds, posterior_covariance, IvrAcquisition, integrated_variance, simulate_at_theta, ActiveLearningLoop)
+- [x] `test(core): IVR contracts + variance-shrinkage gate` — 14 tests, all green
+- [x] `chore: Phase 5 acquisition + IV-trace plots` — viz_output/phase5_optimizer/optimizer_{S}_step{1..5}.png + optimizer_{S}_iv.png
 
 ### Cross-cutting
 - [ ] CI workflow (pytest + ruff)
