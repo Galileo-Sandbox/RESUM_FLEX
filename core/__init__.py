@@ -13,6 +13,15 @@ from core.mfgp_pipeline import (
     fit_mfgp_three_fidelity,
     prepare_mfgp_datasets,
 )
+from core.optimizer import (
+    ActiveLearningLoop,
+    ActiveLearningStep,
+    BoxBounds,
+    IvrAcquisition,
+    integrated_variance,
+    posterior_covariance,
+    simulate_at_theta,
+)
 from core.surrogate_mfgp import MultiFidelityGP
 from core.training import (
     TrainingHistory,
@@ -24,10 +33,14 @@ from core.training import (
 )
 
 __all__ = [
+    "ActiveLearningLoop",
+    "ActiveLearningStep",
+    "BoxBounds",
     "CnpDecoder",
     "CnpOutput",
     "ConditionalNeuralProcess",
     "ContextPointEncoder",
+    "IvrAcquisition",
     "MLPEncoder",
     "MultiFidelityGP",
     "TrainingHistory",
@@ -39,9 +52,12 @@ __all__ = [
     "evaluate_mae",
     "evaluate_mfgp_coverage",
     "fit_mfgp_three_fidelity",
+    "integrated_variance",
     "load_checkpoint",
+    "posterior_covariance",
     "prepare_mfgp_datasets",
     "save_checkpoint",
+    "simulate_at_theta",
     "split_context_target",
     "train_cnp",
 ]
