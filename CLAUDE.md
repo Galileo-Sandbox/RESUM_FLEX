@@ -102,13 +102,24 @@ Apply the **comparison rule**:
 - Pass: σ band narrow near HF points, wider in gaps; numerical coverage on holdout approaches 68 / 95 / 99.7%.
 
 ### Phase 5 — IVR optimizer
-File(s): `viz_output/phase5_optimizer/optimizer_{S}_step{1..N}.png`, `viz_output/phase5_optimizer/optimizer_{S}_iv.png`
-- 2D θ: side-by-side heatmaps of posterior σ(θ) and the IVR acquisition surface.
-- 1D θ: side-by-side line plots of σ(θ) (with analytical t̄(θ) overlaid) and acquisition.
+File(s) per scenario in `viz_output/phase5_optimizer/`:
+- `optimizer_{S}_step{1..N}.png` — per-step σ + acquisition surfaces.
+- `optimizer_{S}_iv.png` — integrated-variance trace across AL steps.
+- `optimizer_{S}_trajectory.png` — final-state search history: t̄(θ), MFGP μ(θ) ± σ, initial HF (gray dots), 5 AL steps as numbered red stars, vertical markers at the true and predicted optima.
+- `optimizer_{S}_metrics.png` — per-step optimization gap |θ_true − θ_pred| and surrogate MAE(μ, t̄).
+
+Annotations:
+- 2D θ: side-by-side heatmaps of posterior σ(θ) and the IVR acquisition surface; cyan X marks the true optimum, orange diamond marks the predicted optimum.
+- 1D θ: side-by-side line plots of σ(θ) (with analytical t̄(θ) overlaid) and acquisition; vertical dotted blue line at true argmax/argmin, red dot-dash line at predicted argmax/argmin.
 - Overlay all previously-sampled θ as dots, the next θ as a red star.
-- Cross-check: the red star sits in the region with high σ.
-- IV-trace plot per scenario: integrated posterior variance across active-learning steps must trend downward.
-- Pass: across iterations the posterior σ band visibly shrinks across Θ.
+
+Optimization target (max vs min) is a CLI flag `--target {max,min}` (default `max` since our Gaussian-bump truths peak at `θ_peak`). IVR itself is direction-agnostic; the flag only changes how the true / predicted optimum is highlighted and reported.
+
+Pass criteria:
+- Posterior σ band shrinks across Θ as steps accumulate (qualitative).
+- Integrated posterior variance trends downward (∫σ²-trace plot).
+- Surrogate MAE(μ, t̄) decreases over the AL run; gap |θ_true − θ_pred| does not blow up.
+- Cross-check: AL stars either cluster near the true optimum (exploitation) or systematically reduce MAE / gap by exploring the gaps in σ (pure-exploration behavior of IVR).
 
 | Phase | Output file | What to look for |
 |---|---|---|
