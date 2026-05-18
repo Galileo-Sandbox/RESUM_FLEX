@@ -1,0 +1,49 @@
+# Notebook-friendly config for notebooks/minimal_example.ipynb.
+#
+# Same schema as ../config.yaml, but with smaller models and fewer training
+# steps so a full end-to-end run (CNP train + MFGP fit + 3 AL steps) finishes
+# in roughly 1-2 minutes on CPU. For production / paper-quality runs, use
+# the canonical ../config.yaml.
+
+seed: 0
+
+encoder:
+  type: mlp
+  latent_dim: 32
+  hidden_dims: [64, 64]
+  dropout: 0.0
+
+cnp:
+  n_context_min: 32
+  n_context_max: 96
+  output_activation: sigmoid
+  mixup_alpha: 0.1
+
+mfgp:
+  kernel: rbf
+  n_fidelities: 3
+
+ivr:
+  n_mc_samples: 500
+
+training:
+  n_steps: 500           # 500 is enough for S1 to converge on synthetic data
+  learning_rate: 1.0e-3
+  batch_size: 16
+  n_events_per_trial: 128
+  n_mc_samples: 4
+  grad_clip: 1.0
+  eval_every: 100
+  eval_batch_size: 32
+  eval_n_events: 256
+  seed: 0
+
+mae_thresholds:
+  s1: 0.05
+  s2: 0.08
+  s3: 0.08
+  s4: 0.12
+  s5: 0.05
+  s6: 0.08
+  s7: 0.05
+  s8: 0.08
