@@ -6,6 +6,7 @@ from core.surrogate_cnp import (
     ContextPointEncoder,
     build_cnp,
     cnp_loss,
+    resum_binary_moments,
     split_context_target,
 )
 from core.scaling import MinMaxScaler
@@ -94,6 +95,7 @@ __all__ = [
     "build_cnp",
     "build_encoder",
     "cnp_loss",
+    "resum_binary_moments",
     "cnp_trial_predictive",
     "evaluate_mae",
     "evaluate_mfgp_coverage",

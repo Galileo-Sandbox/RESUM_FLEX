@@ -160,7 +160,8 @@ Phases run in order. Each phase has a hard acceptance gate before the next begin
 ### Phase 3 — CNP (`core/surrogate_cnp.py`)
 - Train CNP on pseudo-data; recover continuous `β ≈ p`.
 - **Training paradigm — context-target split (meta-learning).** Each simulation batch is partitioned per-step into a *context* set (the encoder + aggregator sees these) and a *target* set (the decoder predicts on these). `n_context` is sampled in `[n_context_min, n_context_max]` from `config.cnp`. The model learns to summarize an arbitrary context into a representation that makes the target predictable.
-- **Loss — Bernoulli NLL on `X`, NOT BCE on `X`.** Sample `β` from the Gaussian over the latent `t(θ,φ)` predicted by the decoder, then compute `-log Bernoulli(X | p=β)` summed over targets. The point is to estimate `p`, not to classify `X`.
+- **Loss — preserve original RESuM numerics.** Apply the reference
+  logistic-normal moment transform and optimize Normal NLL at `X`.
 - **Aggregator axis — reduce over `N`, NEVER over `B`.** The aggregator collapses the per-event latents `[B, N_ctx, Z]` into a per-trial summary `[B, Z]` by taking the mean along the *event* axis. Reducing over the batch axis would mix unrelated trials and silently break learning. (See "Implementation gotchas" in the Math section.)
 - **Gate (1D):** for 1D θ or φ, regression curve must pass through the dense center of the binary `X` cloud.
 - **Gate (2D):** for 2D inputs, predicted `β` heatmap "peaks" must align with ground-truth `p` heatmap peaks.
@@ -242,9 +243,10 @@ These are the formulas that pin down loss functions, output shapes, and validati
 - Replaces binary `X_ki` with a continuous score `β_ki ≈ t(θ_k, φ_ki) ∈ [0,1]`.
 - Bayesian view: CNP is a VAE-like estimator of the latent function `t(θ,φ)`. The "decoder" is the *predefined* Bernoulli; the "encoder" `q_NN` is what we train.
   `q_NN(t(θ,φ)) = N(μ_NN(θ,φ;w), σ²_NN(θ,φ;w))` conditioned on `{X_ki, φ_ki, θ_k}`.
-- **Training loss** = negative log-likelihood of observed binary data under the Bernoulli model marginalized over `q_NN` (Eq. 11 in paper):
-  `L = Π_k Π_i ∫ Bernoulli(X_ki | p = t(θ_k,φ_ki)) · q_NN(t) dt`
-  Practically: sample `β` from `q_NN`, compute Bernoulli NLL on `X`. **Do NOT train CNP to predict `X` directly via BCE — train it to estimate `p` via the marginalized likelihood.**
+- **Training loss follows the reference RESuM code.** Raw decoder outputs are
+  converted with its logistic-normal moment approximation, then define a
+  Normal distribution whose negative log probability at binary `X` is
+  minimized. `resum_binary_moments` is the executable reference formula.
 - Architecture: `encoder (MLP) → mean-aggregator → decoder`. Context point = concat(θ, φ_i, X_i). β output bounded to `[0,1]` (sigmoid or equivalent).
 - `β_ki` is **fidelity-invariant** by construction — it depends only on `(θ, φ)`, so the same CNP applies to LF and HF events.
 
@@ -292,7 +294,8 @@ This is the project's gold-standard test. The ablation without `y_CNP` got 12% /
 
 ### Implementation gotchas these formulas imply
 - CNP output activation must keep `β ∈ [0,1]` — `μ_NN` should be passed through sigmoid (or use a bounded distribution).
-- CNP loss is **not** BCE on `X`; it's Bernoulli NLL with `p` sampled from a Gaussian over `β`. Test this on synthetic data where ground-truth `t(θ,φ)` is known.
+- CNP loss must remain numerically aligned with the original RESuM
+  `sigmoid_expectation` + Normal `log_prob` implementation.
 - **Aggregator axis (CRITICAL):** the CNP aggregator reduces along the **event axis `N`**, *never* along the **batch axis `B`**. Latents `[B, N_ctx, Z]` collapse to `[B, Z]` via `mean(dim=1)` (not `dim=0`). Reducing over `B` mixes unrelated trials and destroys learning silently — the loss still goes down, the predictions are garbage. Add an explicit `assert` on the aggregated tensor's first dim.
 - MFGP must accept `(θ_k, y_CNP^LF_k)`, `(θ_k, y_CNP^HF_k)`, `(θ_k, y_Raw^HF_k)` as three separate fidelity datasets, not stacked — Emukit's API handles this explicitly.
 - IVR acquisition needs to evaluate the GP posterior fast and many times — keep the GP backend (GPy) hot, don't re-instantiate per call.

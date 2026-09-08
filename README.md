@@ -413,9 +413,10 @@ save_checkpoint("results/cnp.ckpt", cnp,
 that; real data does not. Set `eval_every=0` to disable it on real data,
 and run your own held-out evaluation (Section 3 / 5) after training.
 
-The CNP loss is **Bernoulli NLL** of the binary `X` under `p = β` — *not*
-BCE on `X`. Output `β` is bounded to `[0, 1]` via sigmoid. The aggregator
-collapses the **event axis only** (asserted in `forward`).
+The CNP loss follows the original RESuM implementation: decoder outputs are
+mapped through its logistic-normal moment approximation, then optimized with
+a Normal negative log likelihood at the binary `X`. The predicted mean `β`
+is bounded to `[0, 1]`. The aggregator collapses the **event axis only**.
 
 ### 3. CNP-only coverage check (no MFGP)
 

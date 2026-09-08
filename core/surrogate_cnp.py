@@ -15,9 +15,10 @@ Architecture
 input contract (``θ=None`` or ``φ=None`` → learnable null token) flows
 through transparently.
 
-For each target, ``β = sigmoid(μ + softplus(log σ) · ε)`` with ``ε~N(0,1)``;
-the loss is the Bernoulli NLL of the target ``X`` under ``p=β`` averaged
-over Monte-Carlo samples of ``ε`` (and over batch & target events).
+For binary targets the two raw decoder channels are transformed with the
+same logistic-normal moment approximation as the original RESuM code. The
+resulting mean and scale parameterise a Normal distribution and training
+minimises its negative log probability at the observed binary target.
 
 CRITICAL: the aggregator reduces along **event axis 1**, never axis 0.
 Reducing axis 0 mixes unrelated trials and silently destroys learning;
@@ -134,6 +135,22 @@ class CnpOutput:
     log_sigma: torch.Tensor  # [B, N_t]
 
 
+def resum_binary_moments(out: CnpOutput) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the binary predictive mean/scale used by original RESuM.
+
+    This intentionally mirrors ``sigmoid_expectation`` followed by the
+    decoder's final ``softplus`` in the reference implementation. The second
+    decoder channel is raw despite its historical ``log_sigma`` name.
+    """
+    bounded_sigma = 0.1 + 0.9 * F.softplus(out.log_sigma)
+    divisor = torch.sqrt(1.0 + 3.0 / (np.pi**2) * bounded_sigma**2)
+    divisor = torch.clamp(divisor, min=1e-4)
+    mean = torch.sigmoid(out.mu_logit / divisor)
+    variance_proxy = mean * (1.0 - mean) * (1.0 - 1.0 / divisor)
+    scale = F.softplus(variance_proxy) + 1e-6
+    return mean, scale
+
+
 class ConditionalNeuralProcess(nn.Module):
     """Universal-input CNP composed of encoder + context-point MLP + decoder."""
 
@@ -206,11 +223,11 @@ class ConditionalNeuralProcess(nn.Module):
     ) -> torch.Tensor:
         """Deterministic ``β = sigmoid(μ_logit)`` for evaluation / plotting.
 
-        Drops the aleatoric noise term — the MC sampling is only useful
-        during training where it shapes the loss landscape.
+        Returns the mean of the original RESuM binary predictive transform.
         """
         out = self(ctx_batch, target_batch)
-        return torch.sigmoid(out.mu_logit)
+        mean, _ = resum_binary_moments(out)
+        return mean
 
 
 # ---------------------------------------------------------------------------
@@ -225,25 +242,14 @@ def cnp_loss(
     n_mc_samples: int = 4,
     eps: float = 1e-6,
 ) -> torch.Tensor:
-    """Bernoulli NLL of ``x_target`` under ``p=β``, averaged over MC β samples.
+    """Original-RESuM Normal negative log likelihood for binary targets.
 
-    ``β = sigmoid(μ_logit + softplus(log σ) · ε)``, ``ε ~ N(0, 1)``.
-
-    This is *not* BCE on ``X``: BCE collapses the model into a classifier
-    of the binary outcome, while we want it to estimate the underlying
-    Bernoulli rate ``p`` — that's what makes the score ``β`` a useful
-    denoised input for the downstream MFGP.
+    ``n_mc_samples`` and ``eps`` remain accepted for API compatibility; the
+    reference objective is analytic and does not use Monte Carlo sampling.
     """
-    sigma = F.softplus(out.log_sigma)  # always positive
-    eps_samples = torch.randn(
-        n_mc_samples, *out.mu_logit.shape,
-        device=out.mu_logit.device, dtype=out.mu_logit.dtype,
-    )
-    beta_logit = out.mu_logit.unsqueeze(0) + sigma.unsqueeze(0) * eps_samples
-    beta = torch.sigmoid(beta_logit).clamp(eps, 1.0 - eps)  # [K, B, N_t]
-    x = x_target.unsqueeze(0)
-    nll = -(x * torch.log(beta) + (1.0 - x) * torch.log(1.0 - beta))
-    return nll.mean()
+    del n_mc_samples, eps
+    mean, scale = resum_binary_moments(out)
+    return -torch.distributions.Normal(mean, scale).log_prob(x_target).mean()
 
 
 # ---------------------------------------------------------------------------
