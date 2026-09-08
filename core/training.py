@@ -28,6 +28,7 @@ from core.surrogate_cnp import (
     cnp_loss,
     split_context_target,
 )
+from data.batch_source import BatchSource
 from data.pseudo_generator import PseudoDataGenerator
 from schemas.config import CNPConfig, EncoderConfig, TrainingConfig
 from schemas.data_models import InputMode, StandardBatch
@@ -57,13 +58,13 @@ class TrainingHistory(dict):
 
 def train_cnp(
     cnp: ConditionalNeuralProcess,
-    generator: PseudoDataGenerator,
+    generator: BatchSource,
     *,
     cnp_config: CNPConfig,
     training_config: TrainingConfig,
     progress_callback: Callable[[int, float], None] | None = None,
 ) -> TrainingHistory:
-    """Train a CNP via context-target meta-learning on synthetic data."""
+    """Train a CNP from any object implementing :class:`BatchSource`."""
     rng = np.random.default_rng(training_config.seed)
     torch.manual_seed(training_config.seed)
     optimizer = torch.optim.Adam(cnp.parameters(), lr=training_config.learning_rate)
