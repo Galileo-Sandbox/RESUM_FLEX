@@ -2,11 +2,15 @@ from core.networks import MLPEncoder, UniversalEncoder, build_encoder
 from core.surrogate_cnp import (
     CnpDecoder,
     CnpOutput,
+    CnpObjective,
     ConditionalNeuralProcess,
     ContextPointEncoder,
     build_cnp,
     cnp_loss,
+    practice_truth_loss,
+    resum_binary_moments,
     split_context_target,
+    theory_truth_loss,
 )
 from core.scaling import MinMaxScaler
 from core.training import (
@@ -79,6 +83,7 @@ __all__ = [
     "BoxBounds",
     "CnpDecoder",
     "CnpOutput",
+    "CnpObjective",
     "ConditionalNeuralProcess",
     "ContextPointEncoder",
     "ExpectedImprovementAcquisition",
@@ -94,6 +99,8 @@ __all__ = [
     "build_cnp",
     "build_encoder",
     "cnp_loss",
+    "practice_truth_loss",
+    "resum_binary_moments",
     "cnp_trial_predictive",
     "evaluate_mae",
     "evaluate_mfgp_coverage",
@@ -109,5 +116,6 @@ __all__ = [
     "save_mfgp",
     "simulate_at_theta",
     "split_context_target",
+    "theory_truth_loss",
     "train_cnp",
 ]

@@ -16,6 +16,7 @@ encoder:
 cnp:
   n_context_min: 32
   n_context_max: 96
+  objective: theory-truth
 
 mfgp:
   kernel: rbf
@@ -29,7 +30,6 @@ training:
   learning_rate: 1.0e-3
   batch_size: 16
   n_events_per_trial: 128
-  n_mc_samples: 4
   grad_clip: 1.0
   eval_every: 100
   eval_batch_size: 32

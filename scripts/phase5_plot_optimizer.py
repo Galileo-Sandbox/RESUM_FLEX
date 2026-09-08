@@ -86,7 +86,7 @@ def _train_cfg(name: str) -> TrainingConfig:
     return TrainingConfig(
         n_steps=CNP_STEPS[name],
         learning_rate=1.0e-3, batch_size=16,
-        n_events_per_trial=128, n_mc_samples=4,
+        n_events_per_trial=128,
         eval_every=0, seed=0,
     )
 

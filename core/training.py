@@ -20,12 +20,11 @@ from typing import Any
 import numpy as np
 import torch
 
-import torch.nn.functional as F
-
 from core.surrogate_cnp import (
     ConditionalNeuralProcess,
     build_cnp,
     cnp_loss,
+    resum_binary_moments,
     split_context_target,
 )
 from data.batch_source import BatchSource
@@ -95,7 +94,11 @@ def train_cnp(
 
         out = cnp(ctx, tgt)
         x_target = torch.as_tensor(tgt.labels, dtype=torch.float32)
-        loss = cnp_loss(out, x_target, n_mc_samples=training_config.n_mc_samples)
+        loss = cnp_loss(
+            out,
+            x_target,
+            objective=cnp_config.objective,
+        )
 
         optimizer.zero_grad()
         loss.backward()
@@ -167,14 +170,11 @@ def cnp_trial_predictive(
 ) -> dict[str, np.ndarray]:
     """Trial-level predictive distribution over ``y = m/N``.
 
-    Uses the CNP decoder's per-event Gaussian over the score ``β`` to
-    derive a per-trial mean ``y_CNP`` and uncertainty ``σ_CNP``. The
-    propagation has two pieces:
+    Uses the original RESuM binary predictive Normal to derive a per-trial
+    mean ``y_CNP`` and uncertainty ``σ_CNP``. The propagation has two pieces:
 
-    * **Epistemic** (from the decoder's ``σ_NN``): MC-sample
-      ``β_i = sigmoid(μ_i + softplus(log σ_i)·ε_i)`` for ``K`` independent
-      noise draws, take the per-sample trial mean, then the std across
-      samples. Captures how confidently the CNP knows the rate.
+    * **Epistemic**: sample the Normal returned by the reference transform,
+      average events per draw, then take the standard deviation across draws.
     * **Aleatoric** (Bernoulli sampling noise on ``y_raw=m/N``):
       ``√(ŷ(1-ŷ)/N)`` with ``ŷ = y_CNP``. Captures the irreducible noise
       that ``m/N`` has around any given rate. Set
@@ -188,16 +188,12 @@ def cnp_trial_predictive(
     cnp.eval()
     with torch.no_grad():
         out = cnp(ctx_batch, target_batch)
-        sigma = F.softplus(out.log_sigma)                  # [B, N_t]
-        eps = torch.randn(
-            n_mc_samples, *out.mu_logit.shape,
-            dtype=out.mu_logit.dtype, device=out.mu_logit.device,
-        )
-        beta_samples = torch.sigmoid(
-            out.mu_logit.unsqueeze(0) + sigma.unsqueeze(0) * eps
+        mean, scale = resum_binary_moments(out)
+        beta_samples = torch.distributions.Normal(mean, scale).sample(
+            (n_mc_samples,)
         )                                                  # [K, B, N_t]
         y_per_sample = beta_samples.mean(dim=2)            # [K, B]
-    y_cnp = y_per_sample.mean(dim=0).cpu().numpy()
+    y_cnp = mean.mean(dim=1).cpu().numpy()
     sigma_epistemic = y_per_sample.std(dim=0).cpu().numpy()
 
     n_t = float(target_batch.n_events)

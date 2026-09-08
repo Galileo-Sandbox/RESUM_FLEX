@@ -38,6 +38,7 @@ class EncoderConfig(StrictConfigModel):
 class CNPConfig(StrictConfigModel):
     n_context_min: int = Field(gt=0)
     n_context_max: int = Field(gt=0)
+    objective: Literal["theory-truth", "practice-truth"] = "theory-truth"
 
     @field_validator("n_context_max")
     @classmethod
@@ -68,7 +69,6 @@ class TrainingConfig(StrictConfigModel):
     learning_rate: float = Field(gt=0.0, default=1.0e-3)
     batch_size: int = Field(gt=0, default=16)
     n_events_per_trial: int = Field(gt=0, default=128)
-    n_mc_samples: int = Field(gt=0, default=4)
     grad_clip: float | None = Field(default=1.0)
     eval_every: int = Field(ge=0, default=100)
     eval_batch_size: int = Field(gt=0, default=32)

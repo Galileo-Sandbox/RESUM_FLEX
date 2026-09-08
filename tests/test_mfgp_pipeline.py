@@ -64,7 +64,7 @@ def _quick_cnp(name: str = "S7"):
         ),
         training_config=TrainingConfig(
             n_steps=200, learning_rate=1.0e-3, batch_size=16,
-            n_events_per_trial=64, n_mc_samples=4, eval_every=0, seed=0,
+            n_events_per_trial=64, eval_every=0, seed=0,
         ),
     )
     return gen, cnp
