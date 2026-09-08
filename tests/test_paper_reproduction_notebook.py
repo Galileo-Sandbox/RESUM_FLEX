@@ -50,12 +50,21 @@ def test_paper_reproduction_notebook_uses_aggregate_csv_contract() -> None:
     assert "RESUM_LEGACY_ROOT" not in source
 
 
-def test_paper_reproduction_notebook_is_unexecuted() -> None:
-    """Avoid committing machine-specific numerical outputs and paths."""
-    for cell in load_notebook()["cells"]:
-        if cell["cell_type"] == "code":
-            assert cell["execution_count"] is None
-            assert cell["outputs"] == []
+def test_paper_reproduction_notebook_contains_executed_figures() -> None:
+    """Commit a complete, error-free run while preserving the empty CNP cell."""
+    cells = load_notebook()["cells"]
+    executed = [
+        cell
+        for cell in cells
+        if cell["cell_type"] == "code"
+        and "cnp-todo" not in cell.get("metadata", {}).get("tags", [])
+    ]
+    outputs = [output for cell in executed for output in cell["outputs"]]
+
+    assert all(cell["execution_count"] is not None for cell in executed)
+    assert not any(output["output_type"] == "error" for output in outputs)
+    assert sum("image/png" in output.get("data", {}) for output in outputs) == 6
+    assert "/tmp/" not in json.dumps(outputs)
 
 
 def test_bundled_aggregate_data_is_unchanged() -> None:
