@@ -43,7 +43,6 @@ def _train_cfg(steps: int = 50, n_events: int = 32, eval_every: int = 0) -> Trai
         learning_rate=1.0e-3,
         batch_size=4,
         n_events_per_trial=n_events,
-        n_mc_samples=2,
         eval_every=eval_every,
         eval_batch_size=8,
         eval_n_events=64,
@@ -95,6 +94,31 @@ def test_progress_callback_invoked() -> None:
         progress_callback=lambda step, loss: seen_steps.append(step),
     )
     assert seen_steps == list(range(10))
+
+
+@pytest.mark.parametrize("objective", ["theory-truth", "practice-truth"])
+def test_train_cnp_routes_configured_truth_objective(monkeypatch, objective) -> None:
+    import core.training as training_module
+
+    seen: list[str] = []
+
+    def recording_loss(out, x_target, *, objective):
+        del x_target
+        seen.append(objective)
+        return out.mu_logit.mean()
+
+    monkeypatch.setattr(training_module, "cnp_loss", recording_loss)
+    gen = for_scenario("S5", seed=0)
+    cnp = build_cnp(_enc_cfg(), gen.dim_theta, gen.dim_phi)
+    train_cnp(
+        cnp,
+        gen,
+        cnp_config=CNPConfig(
+            n_context_min=8, n_context_max=16, objective=objective
+        ),
+        training_config=_train_cfg(steps=1),
+    )
+    assert seen == [objective]
 
 
 # ---------------------------------------------------------------------------

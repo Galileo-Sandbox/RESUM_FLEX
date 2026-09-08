@@ -16,9 +16,10 @@ input contract (``θ=None`` or ``φ=None`` → learnable null token) flows
 through transparently.
 
 For binary targets the two raw decoder channels are transformed with the
-same logistic-normal moment approximation as the original RESuM code. The
-resulting mean and scale parameterise a Normal distribution and training
-minimises its negative log probability at the observed binary target.
+same logistic-normal moment approximation as the original RESuM code. Two
+explicit objectives are provided: ``theory-truth`` implements the marginalized
+Bernoulli likelihood, while ``practice-truth`` reproduces the legacy code's
+Normal likelihood on binary observations.
 
 CRITICAL: the aggregator reduces along **event axis 1**, never axis 0.
 Reducing axis 0 mixes unrelated trials and silently destroys learning;
@@ -28,6 +29,7 @@ the forward asserts the post-aggregation batch dim matches input ``B``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import torch
@@ -37,6 +39,8 @@ import torch.nn.functional as F
 from core.networks import UniversalEncoder, build_encoder
 from schemas.config import EncoderConfig
 from schemas.data_models import StandardBatch
+
+CnpObjective = Literal["theory-truth", "practice-truth"]
 
 
 # ---------------------------------------------------------------------------
@@ -239,15 +243,51 @@ def cnp_loss(
     out: CnpOutput,
     x_target: torch.Tensor,
     *,
-    n_mc_samples: int = 4,
+    eps: float = 1e-6,
+    objective: CnpObjective = "theory-truth",
+) -> torch.Tensor:
+    """Dispatch to one of the two documented RESuM truth objectives.
+
+    Both objectives are analytic and do not require Monte Carlo sampling.
+    """
+    if objective == "theory-truth":
+        return theory_truth_loss(out, x_target, eps=eps)
+    if objective == "practice-truth":
+        return practice_truth_loss(out, x_target)
+    raise ValueError(
+        "objective must be 'theory-truth' or 'practice-truth'; "
+        f"got {objective!r}"
+    )
+
+
+def theory_truth_loss(
+    out: CnpOutput,
+    x_target: torch.Tensor,
+    *,
     eps: float = 1e-6,
 ) -> torch.Tensor:
-    """Original-RESuM Normal negative log likelihood for binary targets.
+    """Paper-level marginalized Bernoulli negative log likelihood.
 
-    ``n_mc_samples`` and ``eps`` remain accepted for API compatibility; the
-    reference objective is analytic and does not use Monte Carlo sampling.
+    For binary ``x``, integrating ``Bernoulli(x | p)`` over the predictive
+    distribution depends only on ``E[p]``. ``resum_binary_moments`` supplies
+    the reference logistic-normal approximation ``p_bar`` to that mean, so
+
+    ``L = -mean[x log(p_bar) + (1-x) log(1-p_bar)]``.
+
+    This is the probability-theory interpretation and the recommended default.
     """
-    del n_mc_samples, eps
+    mean, _ = resum_binary_moments(out)
+    mean = mean.clamp(eps, 1.0 - eps)
+    return F.binary_cross_entropy(mean, x_target)
+
+
+def practice_truth_loss(out: CnpOutput, x_target: torch.Tensor) -> torch.Tensor:
+    """Literal negative log likelihood executed by the legacy RESuM code.
+
+    The old implementation treats binary ``X`` as observations of a Normal
+    distribution parameterized by the transformed mean and scale. This is
+    retained for reproducibility even though it is not a Bernoulli likelihood.
+    """
     mean, scale = resum_binary_moments(out)
     return -torch.distributions.Normal(mean, scale).log_prob(x_target).mean()
 

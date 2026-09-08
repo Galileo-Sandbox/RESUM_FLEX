@@ -192,6 +192,7 @@ encoder:                          # MLP encoder (Phase 2)
 cnp:                              # CNP (Phase 3)
   n_context_min: 16
   n_context_max: 64
+  objective: theory-truth         # or practice-truth
 
 mfgp:                             # MFGP (Phase 4)
   kernel: rbf                     # 'rbf' or 'matern52'
@@ -205,7 +206,6 @@ training:                         # CNP training loop (Phase 3)
   learning_rate: 1.0e-3
   batch_size: 16
   n_events_per_trial: 128
-  n_mc_samples: 4
   grad_clip: 1.0
   eval_every: 200
   eval_batch_size: 32
@@ -229,9 +229,10 @@ mae_thresholds:                   # Phase 3 acceptance gate per scenario
 from schemas.config import EncoderConfig, CNPConfig, TrainingConfig
 
 enc_cfg = EncoderConfig(type="mlp", latent_dim=64, hidden_dims=[128, 128], dropout=0.0)
-cnp_cfg = CNPConfig(n_context_min=16, n_context_max=64)
+cnp_cfg = CNPConfig(n_context_min=16, n_context_max=64,
+                    objective="theory-truth")
 train_cfg = TrainingConfig(n_steps=1500, learning_rate=1.0e-3, batch_size=16,
-                           n_events_per_trial=128, n_mc_samples=4, seed=0)
+                           n_events_per_trial=128, seed=0)
 ```
 
 ### Override a single field
@@ -393,11 +394,12 @@ cnp = build_cnp(enc_cfg, dim_theta=sampler.dim_theta, dim_phi=sampler.dim_phi)
 
 history = train_cnp(
     cnp, sampler,
-    cnp_config=CNPConfig(n_context_min=32, n_context_max=96),
+    cnp_config=CNPConfig(n_context_min=32, n_context_max=96,
+                         objective="theory-truth"),
     training_config=TrainingConfig(
         n_steps=1500, learning_rate=1e-3,
         batch_size=16, n_events_per_trial=128,
-        n_mc_samples=4, eval_every=0,    # ← 0 for real data; see note below
+        eval_every=0,                    # ← 0 for real data; see note below
         seed=0,
     ),
 )
@@ -413,10 +415,44 @@ save_checkpoint("results/cnp.ckpt", cnp,
 that; real data does not. Set `eval_every=0` to disable it on real data,
 and run your own held-out evaluation (Section 3 / 5) after training.
 
-The CNP loss follows the original RESuM implementation: decoder outputs are
-mapped through its logistic-normal moment approximation, then optimized with
-a Normal negative log likelihood at the binary `X`. The predicted mean `β`
-is bounded to `[0, 1]`. The aggregator collapses the **event axis only**.
+#### Two truth objectives
+
+Both objectives first apply the logistic-normal moment approximation used by
+RESuM. For raw decoder outputs `(μ, s_raw)`:
+
+```text
+s     = 0.1 + 0.9 softplus(s_raw)
+d     = sqrt(1 + 3 s² / π²)
+p̄     = sigmoid(μ / d)
+v     = p̄(1-p̄)(1-1/d)
+s̄     = softplus(v) + ε
+```
+
+`objective="theory-truth"` is the default and follows the probability model:
+
+```text
+L_theory = -mean[X log p̄ + (1-X) log(1-p̄)]
+```
+
+For binary `X`, this is `-⁠log ∫ Bernoulli(X | p) q(p) dp`, because the
+Bernoulli likelihood is linear in `p` and therefore depends on `q` through
+`E[p]=p̄`. Use this when `β` is meant to estimate the physical event
+probability.
+
+`objective="practice-truth"` reproduces what the legacy Python code actually
+executed:
+
+```text
+L_practice = -mean[log Normal(X | p̄, s̄)]
+```
+
+This treats `{0,1}` observations as points under a continuous Normal density.
+It is retained for historical reproducibility, but it is not a Bernoulli
+likelihood and can behave differently in rare-event regimes. Loss values from
+the two objectives are not directly comparable.
+
+The predicted mean `β=p̄` is shared by both interfaces and remains bounded to
+`[0,1]`. The aggregator collapses the **event axis only**.
 
 ### 3. CNP-only coverage check (no MFGP)
 

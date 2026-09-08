@@ -160,8 +160,9 @@ Phases run in order. Each phase has a hard acceptance gate before the next begin
 ### Phase 3 — CNP (`core/surrogate_cnp.py`)
 - Train CNP on pseudo-data; recover continuous `β ≈ p`.
 - **Training paradigm — context-target split (meta-learning).** Each simulation batch is partitioned per-step into a *context* set (the encoder + aggregator sees these) and a *target* set (the decoder predicts on these). `n_context` is sampled in `[n_context_min, n_context_max]` from `config.cnp`. The model learns to summarize an arbitrary context into a representation that makes the target predictable.
-- **Loss — preserve original RESuM numerics.** Apply the reference
-  logistic-normal moment transform and optimize Normal NLL at `X`.
+- **Loss has two explicit contracts.** `theory-truth` (default) optimizes the
+  marginalized Bernoulli likelihood; `practice-truth` reproduces the legacy
+  `sigmoid_expectation` + Normal `log_prob` implementation.
 - **Aggregator axis — reduce over `N`, NEVER over `B`.** The aggregator collapses the per-event latents `[B, N_ctx, Z]` into a per-trial summary `[B, Z]` by taking the mean along the *event* axis. Reducing over the batch axis would mix unrelated trials and silently break learning. (See "Implementation gotchas" in the Math section.)
 - **Gate (1D):** for 1D θ or φ, regression curve must pass through the dense center of the binary `X` cloud.
 - **Gate (2D):** for 2D inputs, predicted `β` heatmap "peaks" must align with ground-truth `p` heatmap peaks.
@@ -243,10 +244,14 @@ These are the formulas that pin down loss functions, output shapes, and validati
 - Replaces binary `X_ki` with a continuous score `β_ki ≈ t(θ_k, φ_ki) ∈ [0,1]`.
 - Bayesian view: CNP is a VAE-like estimator of the latent function `t(θ,φ)`. The "decoder" is the *predefined* Bernoulli; the "encoder" `q_NN` is what we train.
   `q_NN(t(θ,φ)) = N(μ_NN(θ,φ;w), σ²_NN(θ,φ;w))` conditioned on `{X_ki, φ_ki, θ_k}`.
-- **Training loss follows the reference RESuM code.** Raw decoder outputs are
-  converted with its logistic-normal moment approximation, then define a
-  Normal distribution whose negative log probability at binary `X` is
-  minimized. `resum_binary_moments` is the executable reference formula.
+- Both objectives share the legacy logistic-normal moment transform, producing
+  `(p̄, s̄) = resum_binary_moments(out)`.
+- **Theory-truth:** `-Σ[X log p̄ + (1-X) log(1-p̄)]`. For binary `X`, this
+  equals the negative log marginalized Bernoulli likelihood because
+  `∫ Bernoulli(X|p)q(p)dp` depends only on `E_q[p]=p̄`.
+- **Practice-truth:** `-Σ log Normal(X|p̄,s̄)`. This is the literal legacy
+  runtime behavior; it is available for reproducibility, not as the default
+  probability model.
 - Architecture: `encoder (MLP) → mean-aggregator → decoder`. Context point = concat(θ, φ_i, X_i). β output bounded to `[0,1]` (sigmoid or equivalent).
 - `β_ki` is **fidelity-invariant** by construction — it depends only on `(θ, φ)`, so the same CNP applies to LF and HF events.
 
@@ -294,8 +299,9 @@ This is the project's gold-standard test. The ablation without `y_CNP` got 12% /
 
 ### Implementation gotchas these formulas imply
 - CNP output activation must keep `β ∈ [0,1]` — `μ_NN` should be passed through sigmoid (or use a bounded distribution).
-- CNP loss must remain numerically aligned with the original RESuM
-  `sigmoid_expectation` + Normal `log_prob` implementation.
+- Keep both CNP objectives separately tested: theory-truth against the
+  marginalized Bernoulli formula, practice-truth against the legacy Normal
+  `log_prob` implementation. Never silently alias one to the other.
 - **Aggregator axis (CRITICAL):** the CNP aggregator reduces along the **event axis `N`**, *never* along the **batch axis `B`**. Latents `[B, N_ctx, Z]` collapse to `[B, Z]` via `mean(dim=1)` (not `dim=0`). Reducing over `B` mixes unrelated trials and destroys learning silently — the loss still goes down, the predictions are garbage. Add an explicit `assert` on the aggregated tensor's first dim.
 - MFGP must accept `(θ_k, y_CNP^LF_k)`, `(θ_k, y_CNP^HF_k)`, `(θ_k, y_Raw^HF_k)` as three separate fidelity datasets, not stacked — Emukit's API handles this explicitly.
 - IVR acquisition needs to evaluate the GP posterior fast and many times — keep the GP backend (GPy) hot, don't re-instantiate per call.

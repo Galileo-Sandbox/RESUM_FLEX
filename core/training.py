@@ -94,7 +94,11 @@ def train_cnp(
 
         out = cnp(ctx, tgt)
         x_target = torch.as_tensor(tgt.labels, dtype=torch.float32)
-        loss = cnp_loss(out, x_target, n_mc_samples=training_config.n_mc_samples)
+        loss = cnp_loss(
+            out,
+            x_target,
+            objective=cnp_config.objective,
+        )
 
         optimizer.zero_grad()
         loss.backward()

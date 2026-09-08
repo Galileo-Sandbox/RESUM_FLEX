@@ -1,8 +1,8 @@
 """Phase 3 model + loss tests.
 
 These cover the contract before training: shapes are right, the loss is
-finite & sensible, the aggregator collapses the correct axis, gradients
-reach the null tokens, and the loss matches the original RESuM transform.
+finite & sensible, the aggregator collapses the correct axis, gradients reach
+the null tokens, and both truth objectives match their documented formulas.
 
 End-to-end MAE vs. ground-truth ``p`` lives in a separate test
 (see :mod:`tests.test_cnp_training`).
@@ -18,8 +18,10 @@ from core.surrogate_cnp import (
     CnpOutput,
     build_cnp,
     cnp_loss,
+    practice_truth_loss,
     resum_binary_moments,
     split_context_target,
+    theory_truth_loss,
 )
 from data.pseudo_generator import PseudoDataGenerator, for_scenario
 from schemas.config import EncoderConfig
@@ -106,7 +108,7 @@ def test_ctx_target_mode_mismatch_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Loss form: original RESuM logistic-normal transform + Normal NLL.
+# Loss forms: theory-truth and practice-truth.
 # ---------------------------------------------------------------------------
 
 
@@ -127,7 +129,7 @@ def test_binary_moments_match_original_resum_formula() -> None:
     torch.testing.assert_close(scale, expected_scale)
 
 
-def test_loss_matches_original_resum_normal_log_prob() -> None:
+def test_practice_truth_matches_original_resum_normal_log_prob() -> None:
     B, N = 4, 32
     x = torch.randint(0, 2, (B, N)).float()
     mu = torch.zeros(B, N)
@@ -135,7 +137,37 @@ def test_loss_matches_original_resum_normal_log_prob() -> None:
     out = CnpOutput(mu_logit=mu, log_sigma=log_sigma)
     mean, scale = resum_binary_moments(out)
     expected = -torch.distributions.Normal(mean, scale).log_prob(x).mean()
-    torch.testing.assert_close(cnp_loss(out, x, n_mc_samples=16), expected)
+    torch.testing.assert_close(practice_truth_loss(out, x), expected)
+    torch.testing.assert_close(
+        cnp_loss(out, x, objective="practice-truth"), expected
+    )
+
+
+def test_theory_truth_is_marginalized_bernoulli_nll() -> None:
+    x = torch.tensor([[0.0, 1.0]])
+    out = CnpOutput(
+        mu_logit=torch.tensor([[-1.0, 1.0]]),
+        log_sigma=torch.tensor([[0.2, 0.2]]),
+    )
+    mean, _ = resum_binary_moments(out)
+    expected = torch.nn.functional.binary_cross_entropy(mean, x)
+    torch.testing.assert_close(theory_truth_loss(out, x), expected)
+    torch.testing.assert_close(cnp_loss(out, x), expected)
+
+
+def test_truth_objectives_have_different_probability_meanings() -> None:
+    x = torch.tensor([[0.0, 1.0]])
+    out = CnpOutput(mu_logit=torch.zeros_like(x), log_sigma=torch.zeros_like(x))
+    theory = theory_truth_loss(out, x)
+    practice = practice_truth_loss(out, x)
+    assert not torch.isclose(theory, practice)
+
+
+def test_unknown_truth_objective_raises() -> None:
+    x = torch.zeros(1, 1)
+    out = CnpOutput(mu_logit=x, log_sigma=x)
+    with pytest.raises(ValueError, match="objective"):
+        cnp_loss(out, x, objective="unknown")  # type: ignore[arg-type]
 
 
 def test_loss_finite_for_random_init() -> None:
@@ -208,12 +240,12 @@ def test_loss_decreases_on_overfit_batch() -> None:
     losses = []
     for _ in range(300):
         out = cnp(ctx, tgt)
-        loss = cnp_loss(out, x_t, n_mc_samples=4)
+        loss = cnp_loss(out, x_t)
         opt.zero_grad()
         loss.backward()
         opt.step()
         losses.append(loss.item())
 
     final = float(np.mean(losses[-20:]))
-    # The reference Normal objective must improve materially from random init.
+    # The default theory-truth objective must improve from random init.
     assert final < losses[0] - 0.1

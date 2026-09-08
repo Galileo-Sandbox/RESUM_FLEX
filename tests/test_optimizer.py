@@ -390,7 +390,7 @@ def test_active_learning_loop_shrinks_integrated_variance() -> None:
     )
     train_cfg = TrainingConfig(
         n_steps=400, learning_rate=1.0e-3, batch_size=16,
-        n_events_per_trial=128, n_mc_samples=4, eval_every=0, seed=0,
+        n_events_per_trial=128, eval_every=0, seed=0,
     )
     cnp = build_cnp(enc, gen.dim_theta, gen.dim_phi)
     train_cnp(cnp, gen, cnp_config=cnp_cfg, training_config=train_cfg)
