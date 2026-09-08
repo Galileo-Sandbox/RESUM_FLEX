@@ -509,13 +509,18 @@ Once the MFGP is fit, run an active-learning loop to pick the next θ
 to simulate. Two acquisitions are available:
 
 ```python
-from core import ActiveLearningLoop, BoxBounds
+from core import ActiveLearningLoop, BoxBounds, HighFidelityObservation
 
 bounds = BoxBounds(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]))
 
+def evaluate_hf(theta, *, n_events, seed):
+    # Call the real simulator here, then aggregate its event output with CNP.
+    beta_bar, y_raw = run_real_simulation_and_aggregate(theta, n_events, seed)
+    return HighFidelityObservation(beta_bar=beta_bar, y_raw=y_raw)
+
 loop = ActiveLearningLoop(
-    mfgp=mfgp, generator=my_data_generator, cnp=cnp,
-    bounds=bounds, data=data,
+    mfgp=mfgp, bounds=bounds, data=data,
+    observation_provider=evaluate_hf,
     n_hf_events=128, n_mc_samples=1000, n_candidates_per_axis=50,
     refit_n_restarts=5,
     acquisition="ei",          # or "ivr"
