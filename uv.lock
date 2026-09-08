@@ -792,6 +792,8 @@ gp = [
 gp-numpy1 = [
     { name = "emukit" },
     { name = "gpy", version = "1.13.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "scipy", version = "1.12.0", source = { registry = "https://pypi.org/simple" } },
 ]
 
 [package.dev-dependencies]
@@ -820,9 +822,11 @@ requires-dist = [
     { name = "gpy", marker = "extra == 'gp-numpy1'", specifier = ">=1.13.2,<1.14" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=1.24,<3" },
+    { name = "numpy", marker = "extra == 'gp-numpy1'", specifier = ">=1.24,<2" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scipy", specifier = ">=1.10" },
+    { name = "scipy", marker = "extra == 'gp-numpy1'", specifier = ">=1.10,<=1.12" },
     { name = "torch", specifier = ">=2.3", index = "https://download.pytorch.org/whl/cpu" },
 ]
 provides-extras = ["gp", "gp-numpy1"]

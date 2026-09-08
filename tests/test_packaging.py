@@ -35,3 +35,13 @@ def test_pixi_delegates_python_resolution_to_uv() -> None:
     )
     assert tasks["test-numpy1"]["env"]["OPENBLAS_NUM_THREADS"] == "2"
     assert tasks["test-numpy2"]["env"]["OPENBLAS_NUM_THREADS"] == "1"
+
+
+def test_legacy_gp_extra_is_self_contained() -> None:
+    """The published legacy extra must reject an incompatible modern stack."""
+    with (ROOT / "pyproject.toml").open("rb") as stream:
+        project = tomllib.load(stream)
+
+    requirements = project["project"]["optional-dependencies"]["gp-numpy1"]
+    assert "numpy>=1.24,<2" in requirements
+    assert "scipy>=1.10,<=1.12" in requirements

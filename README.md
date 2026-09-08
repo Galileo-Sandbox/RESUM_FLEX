@@ -39,8 +39,9 @@ development. PyTorch is a hard dependency. The `gp` extra installs
 `GPy>=1.14.2` and `emukit>=0.5.1` for MFGP / Phase 4 & 5. Test and lint tools
 live in the non-published `dev` dependency group and are installed by default.
 
-The legacy `gp-numpy1` extra is used only by the NumPy 1 compatibility job.
-This split is required rather than cosmetic: GPy 1.14.2 depends on
+The legacy `gp-numpy1` extra pins its own NumPy and SciPy compatibility bounds
+and is used by the NumPy 1 compatibility job. This split is required rather
+than cosmetic: GPy 1.14.2 depends on
 `paramz>=0.10`, which in turn requires NumPy 2, while GPy 1.13.2 belongs to
 the older NumPy 1 stack. The extras and NumPy groups are declared mutually
 exclusive, so uv rejects invalid combinations instead of silently mixing them.

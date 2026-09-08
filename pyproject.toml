@@ -18,7 +18,12 @@ dependencies = [
 
 [project.optional-dependencies]
 gp = ["GPy>=1.14.2", "emukit>=0.5.1"]
-gp-numpy1 = ["GPy>=1.13.2,<1.14", "emukit>=0.5.1"]
+gp-numpy1 = [
+    "numpy>=1.24,<2",
+    "scipy>=1.10,<=1.12",
+    "GPy>=1.13.2,<1.14",
+    "emukit>=0.5.1",
+]
 
 [dependency-groups]
 # Pin Torch only in the reproducibility matrix so NumPy 1/2 comparisons do
