@@ -655,6 +655,8 @@ class ActiveLearningLoop:
         y_raw = float(observation.y_raw)
         if not np.isfinite([beta_bar, y_raw]).all():
             raise ValueError("observation_provider returned non-finite values")
+        if not 0.0 <= beta_bar <= 1.0 or not 0.0 <= y_raw <= 1.0:
+            raise ValueError("observation_provider rates must lie in [0, 1]")
 
         new_theta = theta_next.reshape(1, -1)
         self.data = {
