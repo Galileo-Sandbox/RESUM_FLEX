@@ -1,0 +1,90 @@
+"""Structural checks for the paper reproduction notebook."""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).parents[1]
+NOTEBOOK = ROOT / "notebooks" / "paper_2410_03873_reproduction.ipynb"
+
+
+def load_notebook() -> dict:
+    """Load the notebook without adding a runtime notebook dependency."""
+    with NOTEBOOK.open(encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def test_paper_reproduction_notebook_has_an_empty_cnp_placeholder() -> None:
+    """Keep the CNP cell genuinely empty until portable event data exist."""
+    cells = load_notebook()["cells"]
+    placeholders = [
+        cell
+        for cell in cells
+        if "cnp-todo" in cell.get("metadata", {}).get("tags", [])
+    ]
+
+    assert len(placeholders) == 1
+    assert placeholders[0]["cell_type"] == "code"
+    assert placeholders[0]["source"] == []
+    assert placeholders[0]["outputs"] == []
+    assert placeholders[0]["execution_count"] is None
+
+
+def test_paper_reproduction_notebook_uses_aggregate_csv_contract() -> None:
+    """The current replay must not silently depend on unavailable HDF5 data."""
+    cells = load_notebook()["cells"]
+    source = "\n".join(
+        "".join(cell.get("source", []))
+        for cell in cells
+        if cell["cell_type"] == "code"
+    )
+
+    assert "paper_2410_03873" in source
+    assert "MultiFidelityGP" in source
+    assert "hf_validation_data_v1.2.csv" in source
+    assert "h5py" not in source
+    assert "/home/" not in source
+    assert "RESUM_LEGACY_ROOT" not in source
+
+
+def test_paper_reproduction_notebook_is_unexecuted() -> None:
+    """Avoid committing machine-specific numerical outputs and paths."""
+    for cell in load_notebook()["cells"]:
+        if cell["cell_type"] == "code":
+            assert cell["execution_count"] is None
+            assert cell["outputs"] == []
+
+
+def test_bundled_aggregate_data_is_unchanged() -> None:
+    """Pin the exact portable aggregate inputs used by the replay."""
+    expected = {
+        "cnp_v1.6_output.csv": (
+            "1903f03a82c3442389cf588a01227a909e679196b2ba94eb715d14bd6fe1c2a3"
+        ),
+        "hf_validation_data_v1.2.csv": (
+            "307723b5b40b42acd68152f4a30f59b120a7b8d0b18d57602c4916eecc6151bf"
+        ),
+    }
+    data_root = ROOT / "notebooks" / "data" / "paper_2410_03873"
+
+    for name, checksum in expected.items():
+        digest = hashlib.sha256((data_root / name).read_bytes()).hexdigest()
+        assert digest == checksum
+
+
+def test_bundled_aggregate_data_has_expected_row_counts() -> None:
+    """Document the paper-versus-artifact sample-count boundary."""
+    data_root = ROOT / "notebooks" / "data" / "paper_2410_03873"
+    with (data_root / "cnp_v1.6_output.csv").open(newline="", encoding="utf-8") as stream:
+        train_rows = list(csv.DictReader(stream))
+    with (data_root / "hf_validation_data_v1.2.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        validation_rows = list(csv.DictReader(stream))
+
+    assert sum(float(row["fidelity"]) == 0 for row in train_rows) == 309
+    assert sum(float(row["fidelity"]) == 1 for row in train_rows) == 10
+    assert len(validation_rows) == 100

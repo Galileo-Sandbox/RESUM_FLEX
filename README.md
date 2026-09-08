@@ -87,6 +87,30 @@ test task fixes BLAS to one thread because its OpenBLAS build otherwise creates
 dozens of workers for small GP matrices. The legacy NumPy 1 task fixes two
 threads to preserve its existing deterministic optimization path.
 
+### Paper aggregate replay
+
+`notebooks/paper_2410_03873_reproduction.ipynb` replays the portions of the
+RESuM paper that are supported by the aggregate artifacts in the original
+repository. It covers the stored CNP diagnostics, all six recorded
+active-learning updates, the three-fidelity MFGP, the 100-trial HF validation,
+and the no-CNP ablation. The notebook labels aggregate replay separately from
+exact recomputation and leaves one intentionally empty CNP cell because the
+complete portable event corpus and current checkpoint are unavailable.
+
+The aggregate inputs and their provenance are bundled under
+`notebooks/data/paper_2410_03873/`, so the notebook does not import or read from
+the original RESuM checkout:
+
+```bash
+pixi run notebook
+```
+
+The `notebook` dependency group supplies JupyterLab without publishing it as a
+runtime library requirement. Pixi delegates that group to uv and materializes
+it in an isolated `.venv-notebook` environment, preserving the same ownership
+boundary as the test environments. The current replay reads CSV files only and
+therefore does not require `h5py`.
+
 ### NumPy compatibility contract
 
 The library declares `numpy>=1.24,<3`; uv's mutually exclusive `numpy1` and
