@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import torch
@@ -461,6 +461,44 @@ def simulate_at_theta(
     return beta_bar, y_raw
 
 
+@dataclass(frozen=True)
+class HighFidelityObservation:
+    """One evaluated design point, ready to append to the MFGP datasets."""
+
+    beta_bar: float
+    y_raw: float
+
+
+class ObservationProvider(Protocol):
+    """Backend contract used by :class:`ActiveLearningLoop`."""
+
+    def __call__(
+        self, theta: np.ndarray, *, n_events: int, seed: int
+    ) -> HighFidelityObservation: ...
+
+
+@dataclass(frozen=True)
+class SyntheticObservationProvider:
+    """Adapter that keeps the existing pseudo-simulation workflow available."""
+
+    generator: PseudoDataGenerator
+    cnp: ConditionalNeuralProcess
+    n_mc_samples: int = 50
+
+    def __call__(
+        self, theta: np.ndarray, *, n_events: int, seed: int
+    ) -> HighFidelityObservation:
+        beta_bar, y_raw = simulate_at_theta(
+            self.generator,
+            self.cnp,
+            theta,
+            n_events=n_events,
+            seed=seed,
+            n_mc_samples=self.n_mc_samples,
+        )
+        return HighFidelityObservation(beta_bar=beta_bar, y_raw=y_raw)
+
+
 # ---------------------------------------------------------------------------
 # Active-learning loop.
 # ---------------------------------------------------------------------------
@@ -509,7 +547,7 @@ class ActiveLearningLoop:
 
     1. Score the chosen acquisition over a candidate set (grid for dim
        ≤ 2, uniform sample for higher-dim).
-    2. Query the pseudo-truth at ``θ_next`` for one fresh HF trial.
+    2. Ask the configured observation provider for one fresh HF trial.
     3. Append ``β̄`` and ``y_raw`` to the MFGP's HF datasets and refit.
     4. Record an :class:`ActiveLearningStep` with the surfaces & metrics.
 
@@ -519,10 +557,11 @@ class ActiveLearningLoop:
     """
 
     mfgp: MultiFidelityGP
-    generator: PseudoDataGenerator
-    cnp: ConditionalNeuralProcess
     bounds: BoxBounds
     data: dict[str, np.ndarray]
+    observation_provider: ObservationProvider | None = None
+    generator: PseudoDataGenerator | None = None
+    cnp: ConditionalNeuralProcess | None = None
     n_hf_events: int = 128
     n_mc_samples: int = 1000
     n_candidates_per_axis: int = 50
@@ -544,6 +583,15 @@ class ActiveLearningLoop:
             )
         if self.target not in ("max", "min"):
             raise ValueError(f"target must be 'max' or 'min', got {self.target!r}")
+        if self.observation_provider is None:
+            if self.generator is None or self.cnp is None:
+                raise ValueError(
+                    "pass observation_provider, or both generator and cnp for "
+                    "the synthetic workflow"
+                )
+            self.observation_provider = SyntheticObservationProvider(
+                self.generator, self.cnp
+            )
 
     def _make_candidates(
         self,
@@ -597,11 +645,18 @@ class ActiveLearningLoop:
         _, var_cand = self.mfgp.predict(cands, fidelity=None)
         sigma_cand = np.sqrt(var_cand)
 
-        beta_bar, y_raw = simulate_at_theta(
-            self.generator, self.cnp, theta_next,
+        assert self.observation_provider is not None
+        observation = self.observation_provider(
+            theta_next,
             n_events=self.n_hf_events,
             seed=self.seed + 1000 + self._step,
         )
+        beta_bar = float(observation.beta_bar)
+        y_raw = float(observation.y_raw)
+        if not np.isfinite([beta_bar, y_raw]).all():
+            raise ValueError("observation_provider returned non-finite values")
+        if not 0.0 <= beta_bar <= 1.0 or not 0.0 <= y_raw <= 1.0:
+            raise ValueError("observation_provider rates must lie in [0, 1]")
 
         new_theta = theta_next.reshape(1, -1)
         self.data = {

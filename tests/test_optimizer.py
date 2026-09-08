@@ -289,6 +289,76 @@ def test_simulate_at_theta_rejects_event_only() -> None:
         )
 
 
+def test_active_loop_accepts_real_observation_provider() -> None:
+    from core import HighFidelityObservation
+
+    calls: list[np.ndarray] = []
+
+    def provider(theta, *, n_events, seed):
+        calls.append(theta.copy())
+        assert n_events == 32
+        assert seed == 1007
+        return HighFidelityObservation(beta_bar=0.25, y_raw=0.2)
+
+    x = np.array([[-1.0], [0.0], [1.0]])
+    y = np.sin(np.pi * x)
+    mfgp = MultiFidelityGP(n_fidelities=3, dim_theta=1).fit(
+        [x, x, x], [y, y, y], n_restarts=1
+    )
+    data = {
+        "X_lf": x.copy(),
+        "Y_lf_cnp": np.zeros((3, 1)),
+        "X_hf": x.copy(),
+        "Y_hf_cnp": np.zeros((3, 1)),
+        "Y_hf_raw": np.zeros((3, 1)),
+    }
+    loop = ActiveLearningLoop(
+        mfgp=mfgp,
+        bounds=BoxBounds(low=np.array([-1.0]), high=np.array([1.0])),
+        data=data,
+        observation_provider=provider,
+        n_hf_events=32,
+        n_mc_samples=20,
+        n_candidates_per_axis=8,
+        refit_n_restarts=1,
+        seed=7,
+    )
+    record = loop.step()
+    assert len(calls) == 1
+    assert record.beta_bar_obs == 0.25
+    assert record.y_raw_obs == 0.2
+
+
+def test_active_loop_rejects_invalid_provider_rates() -> None:
+    from core import HighFidelityObservation
+
+    x = np.array([[-1.0], [0.0], [1.0]])
+    y = np.sin(np.pi * x)
+    mfgp = MultiFidelityGP(n_fidelities=3, dim_theta=1).fit(
+        [x, x, x], [y, y, y], n_restarts=1
+    )
+    data = {
+        "X_lf": x,
+        "Y_lf_cnp": np.zeros((3, 1)),
+        "X_hf": x,
+        "Y_hf_cnp": np.zeros((3, 1)),
+        "Y_hf_raw": np.zeros((3, 1)),
+    }
+    loop = ActiveLearningLoop(
+        mfgp=mfgp,
+        bounds=BoxBounds(low=np.array([-1.0]), high=np.array([1.0])),
+        data=data,
+        observation_provider=lambda theta, **kwargs: HighFidelityObservation(
+            beta_bar=1.2, y_raw=0.2
+        ),
+        n_mc_samples=10,
+        n_candidates_per_axis=5,
+        refit_n_restarts=1,
+    )
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        loop.step()
+
+
 # ---------------------------------------------------------------------------
 # Headline gate: variance shrinks across iterations.
 # ---------------------------------------------------------------------------
