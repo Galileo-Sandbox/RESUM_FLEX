@@ -24,10 +24,30 @@ from core import (
     train_cnp,
 )
 from data import for_scenario
-from schemas.config import CNPConfig, EncoderConfig, TrainingConfig
+from schemas.config import CNPConfig, EncoderConfig, MFGPConfig, TrainingConfig
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"GPy.*")
+
+
+def test_fit_accepts_typed_mfgp_config() -> None:
+    x = np.linspace(-1.0, 1.0, 5)[:, None]
+    data = {
+        "X_lf": x,
+        "Y_lf_cnp": (x**2),
+        "X_hf": x[::2],
+        "Y_hf_cnp": (x[::2] ** 2),
+        "Y_hf_raw": (x[::2] ** 2),
+    }
+    model = fit_mfgp_three_fidelity(
+        data, config=MFGPConfig(kernel="matern52"), n_restarts=1
+    )
+    assert model.kernel_name == "matern52"
+
+
+def test_fit_rejects_config_and_kernel_together() -> None:
+    with pytest.raises(ValueError, match="either config or kernel"):
+        fit_mfgp_three_fidelity({}, config=MFGPConfig(), kernel="rbf")
 
 
 def _quick_cnp(name: str = "S7"):
@@ -41,7 +61,6 @@ def _quick_cnp(name: str = "S7"):
         cnp, gen,
         cnp_config=CNPConfig(
             n_context_min=16, n_context_max=64,
-            output_activation="sigmoid", mixup_alpha=0.1,
         ),
         training_config=TrainingConfig(
             n_steps=200, learning_rate=1.0e-3, batch_size=16,

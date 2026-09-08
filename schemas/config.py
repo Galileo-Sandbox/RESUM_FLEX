@@ -12,10 +12,16 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class EncoderConfig(BaseModel):
+class StrictConfigModel(BaseModel):
+    """Reject misspelled or retired settings instead of ignoring them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class EncoderConfig(StrictConfigModel):
     type: Literal["mlp", "transformer"] = "mlp"
     latent_dim: int = Field(gt=0)
     hidden_dims: list[int]
@@ -29,11 +35,9 @@ class EncoderConfig(BaseModel):
         return v
 
 
-class CNPConfig(BaseModel):
+class CNPConfig(StrictConfigModel):
     n_context_min: int = Field(gt=0)
     n_context_max: int = Field(gt=0)
-    output_activation: Literal["sigmoid"] = "sigmoid"
-    mixup_alpha: float = Field(gt=0.0)
 
     @field_validator("n_context_max")
     @classmethod
@@ -44,16 +48,16 @@ class CNPConfig(BaseModel):
         return v
 
 
-class MFGPConfig(BaseModel):
-    kernel: Literal["rbf", "matern"] = "rbf"
-    n_fidelities: int = Field(ge=2, default=3)
+class MFGPConfig(StrictConfigModel):
+    kernel: Literal["rbf", "matern52"] = "rbf"
+    n_fidelities: Literal[3] = 3
 
 
-class IVRConfig(BaseModel):
+class IVRConfig(StrictConfigModel):
     n_mc_samples: int = Field(gt=0, default=1000)
 
 
-class TrainingConfig(BaseModel):
+class TrainingConfig(StrictConfigModel):
     """CNP training-loop hyperparameters.
 
     Lives in its own subsection so the model architecture (``CNPConfig``)
@@ -72,7 +76,7 @@ class TrainingConfig(BaseModel):
     seed: int = 0
 
 
-class ScenarioThresholds(BaseModel):
+class ScenarioThresholds(StrictConfigModel):
     """Per-scenario MAE thresholds for the Phase 3 acceptance gate."""
 
     s1: float = Field(gt=0)
@@ -85,7 +89,7 @@ class ScenarioThresholds(BaseModel):
     s8: float = Field(gt=0)
 
 
-class Config(BaseModel):
+class Config(StrictConfigModel):
     seed: int = 42
     encoder: EncoderConfig
     cnp: CNPConfig

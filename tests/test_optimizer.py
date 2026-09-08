@@ -317,7 +317,6 @@ def test_active_learning_loop_shrinks_integrated_variance() -> None:
     enc = EncoderConfig(type="mlp", latent_dim=32, hidden_dims=[64, 64])
     cnp_cfg = CNPConfig(
         n_context_min=32, n_context_max=96,
-        output_activation="sigmoid", mixup_alpha=0.1,
     )
     train_cfg = TrainingConfig(
         n_steps=400, learning_rate=1.0e-3, batch_size=16,

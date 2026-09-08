@@ -241,6 +241,15 @@ def test_list_coercion() -> None:
 def test_config_loads() -> None:
     cfg = load_config("config.yaml")
     assert cfg.encoder.latent_dim == 64
-    assert cfg.cnp.mixup_alpha == 0.1
     assert cfg.mfgp.n_fidelities == 3
     assert cfg.mae_thresholds.s4 > cfg.mae_thresholds.s1  # higher-dim looser
+
+
+def test_retired_or_unknown_config_fields_are_rejected() -> None:
+    from pydantic import ValidationError
+    from schemas.config import CNPConfig, MFGPConfig
+
+    with pytest.raises(ValidationError):
+        CNPConfig(n_context_min=1, n_context_max=2, mixup_alpha=0.1)
+    with pytest.raises(ValidationError):
+        MFGPConfig(n_fidelities=2)

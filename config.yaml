@@ -9,8 +9,6 @@ encoder:
 cnp:
   n_context_min: 16
   n_context_max: 64
-  output_activation: sigmoid
-  mixup_alpha: 0.1
 
 mfgp:
   kernel: rbf

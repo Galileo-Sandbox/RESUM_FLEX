@@ -27,7 +27,8 @@ Three input modalities must be supported: `FULL (θ,φ,X)`, `EVENT_ONLY (φ,X)`,
 ### Hard decoupling rules
 - `core/networks.py` (PyTorch) MUST NOT import `core/surrogate_mfgp.py` (GPy/Emukit). The two stacks stay separate.
 - The encoder must be swappable (MLP ↔ Transformer) without changes to `data_engine`.
-- All hyperparameters (layer sizes, kernel types, mixup α, etc.) live in `config.yaml`, loaded via pydantic.
+- All active hyperparameters live in `config.yaml` and are loaded via pydantic;
+  deferred features are not exposed as inert configuration fields.
 - `StandardBatch.theta` and `StandardBatch.phi` are `Optional`; presence is communicated via boolean masks.
 
 ### Input scaling (do not skip on real data)

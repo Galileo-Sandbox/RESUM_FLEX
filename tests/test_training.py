@@ -34,8 +34,6 @@ def _cnp_cfg(n_min: int = 8, n_max: int = 24) -> CNPConfig:
     return CNPConfig(
         n_context_min=n_min,
         n_context_max=n_max,
-        output_activation="sigmoid",
-        mixup_alpha=0.1,
     )
 
 
@@ -132,8 +130,6 @@ def test_invalid_n_context_range_raises() -> None:
     bad = CNPConfig(
         n_context_min=10,
         n_context_max=20,
-        output_activation="sigmoid",
-        mixup_alpha=0.1,
     )
     with pytest.raises(ValueError, match="n_context"):
         train_cnp(cnp, gen, cnp_config=bad, training_config=cfg)
