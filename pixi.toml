@@ -1,0 +1,21 @@
+[workspace]
+name = "resum-flex-tooling"
+version = "0.0.1"
+description = "Cross-platform task runner for the uv-managed RESUM_FLEX Python project"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+# Pixi owns only the external tool layer. Python package declarations and their
+# exact resolution remain exclusively in pyproject.toml and uv.lock.
+[dependencies]
+uv = ">=0.10.9,<0.11"
+
+[tasks]
+lock-check = "uv lock --check"
+sync = { cmd = "uv sync --no-active --frozen --extra gp --group numpy2", env = { UV_PROJECT_ENVIRONMENT = ".venv-numpy2" } }
+sync-numpy1 = { cmd = "uv sync --no-active --frozen --extra gp-numpy1 --no-default-groups --group dev --group numpy1", env = { UV_PROJECT_ENVIRONMENT = ".venv-numpy1" } }
+test = { depends-on = ["test-numpy2"] }
+test-numpy1 = { cmd = "uv run --no-active --frozen --extra gp-numpy1 --no-default-groups --group dev --group numpy1 pytest -q", env = { UV_PROJECT_ENVIRONMENT = ".venv-numpy1", OPENBLAS_NUM_THREADS = "2", OMP_NUM_THREADS = "2", MKL_NUM_THREADS = "2" } }
+test-numpy2 = { cmd = "uv run --no-active --frozen --extra gp --group numpy2 pytest -q", env = { UV_PROJECT_ENVIRONMENT = ".venv-numpy2", OPENBLAS_NUM_THREADS = "1", OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1" } }
+test-all = { depends-on = ["test-numpy1", "test-numpy2"] }
+numpy2-check = { cmd = "uv run --no-active --frozen --group numpy2 ruff check . --select NPY201", env = { UV_PROJECT_ENVIRONMENT = ".venv-numpy2" } }

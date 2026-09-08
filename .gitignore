@@ -6,6 +6,9 @@ __pycache__/
 
 # Virtual environments
 .venv/
+.venv-numpy1/
+.venv-numpy2/
+.pixi/
 venv/
 env/
 ENV/

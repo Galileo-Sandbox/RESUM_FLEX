@@ -6,19 +6,57 @@ build-backend = "setuptools.build_meta"
 name = "resum-flex"
 version = "0.0.1"
 description = "Modular refactor of RESuM: Rare Event Surrogate Model with universal input handling."
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.13"
 dependencies = [
-    "numpy>=1.24,<2.0",
+    "numpy>=1.24,<3",
     "pydantic>=2.5",
     "pyyaml>=6.0",
-    "torch>=2.0",
-    "matplotlib>=3.7",
+    "torch>=2.3",
+    "matplotlib>=3.9",
     "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
-gp = ["GPy>=1.10", "emukit>=0.4.10"]
-dev = ["pytest>=7.4", "ruff>=0.1.0"]
+gp = ["GPy>=1.14.2", "emukit>=0.5.1"]
+gp-numpy1 = ["GPy>=1.13.2,<1.14", "emukit>=0.5.1"]
+
+[dependency-groups]
+# Pin Torch only in the reproducibility matrix so NumPy 1/2 comparisons do
+# not accidentally measure a changing neural-network implementation.
+dev = ["pytest>=7.4", "ruff>=0.4.8", "torch==2.11.0"]
+numpy1 = ["numpy>=1.24,<2", "scipy>=1.10,<=1.12"]
+numpy2 = ["numpy>=2,<3", "scipy>=1.13"]
+
+[tool.uv]
+default-groups = ["dev", "numpy2"]
+conflicts = [
+    [
+        { group = "numpy1" },
+        { group = "numpy2" },
+    ],
+    [
+        { extra = "gp" },
+        { extra = "gp-numpy1" },
+    ],
+    [
+        { extra = "gp" },
+        { group = "numpy1" },
+    ],
+    [
+        { extra = "gp-numpy1" },
+        { group = "numpy2" },
+    ],
+]
+
+# Keep the reproducible development lock CPU-only. Published package metadata
+# remains backend-neutral, so library users can choose their own Torch wheel.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -27,7 +65,7 @@ exclude = ["tests*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
