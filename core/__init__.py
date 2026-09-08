@@ -8,25 +8,7 @@ from core.surrogate_cnp import (
     cnp_loss,
     split_context_target,
 )
-from core.mfgp_pipeline import (
-    evaluate_mfgp_coverage,
-    evaluate_mfgp_coverage_from_batch,
-    fit_mfgp_three_fidelity,
-    prepare_mfgp_datasets,
-    prepare_mfgp_datasets_from_batches,
-)
 from core.scaling import MinMaxScaler
-from core.optimizer import (
-    ActiveLearningLoop,
-    ActiveLearningStep,
-    BoxBounds,
-    ExpectedImprovementAcquisition,
-    IvrAcquisition,
-    integrated_variance,
-    posterior_covariance,
-    simulate_at_theta,
-)
-from core.surrogate_mfgp import MultiFidelityGP, load_mfgp, save_mfgp
 from core.training import (
     TrainingHistory,
     cnp_trial_predictive,
@@ -35,6 +17,46 @@ from core.training import (
     save_checkpoint,
     train_cnp,
 )
+
+_LAZY_GP_EXPORTS = {
+    "ActiveLearningLoop": ("core.optimizer", "ActiveLearningLoop"),
+    "ActiveLearningStep": ("core.optimizer", "ActiveLearningStep"),
+    "BoxBounds": ("core.optimizer", "BoxBounds"),
+    "ExpectedImprovementAcquisition": ("core.optimizer", "ExpectedImprovementAcquisition"),
+    "IvrAcquisition": ("core.optimizer", "IvrAcquisition"),
+    "MultiFidelityGP": ("core.surrogate_mfgp", "MultiFidelityGP"),
+    "evaluate_mfgp_coverage": ("core.mfgp_pipeline", "evaluate_mfgp_coverage"),
+    "evaluate_mfgp_coverage_from_batch": ("core.mfgp_pipeline", "evaluate_mfgp_coverage_from_batch"),
+    "fit_mfgp_three_fidelity": ("core.mfgp_pipeline", "fit_mfgp_three_fidelity"),
+    "integrated_variance": ("core.optimizer", "integrated_variance"),
+    "load_mfgp": ("core.surrogate_mfgp", "load_mfgp"),
+    "posterior_covariance": ("core.optimizer", "posterior_covariance"),
+    "prepare_mfgp_datasets": ("core.mfgp_pipeline", "prepare_mfgp_datasets"),
+    "prepare_mfgp_datasets_from_batches": ("core.mfgp_pipeline", "prepare_mfgp_datasets_from_batches"),
+    "save_mfgp": ("core.surrogate_mfgp", "save_mfgp"),
+    "simulate_at_theta": ("core.optimizer", "simulate_at_theta"),
+}
+
+
+def __getattr__(name: str):
+    """Load GP-dependent exports only when they are requested."""
+    target = _LAZY_GP_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    module_name, attribute = target
+    try:
+        value = getattr(import_module(module_name), attribute)
+    except ModuleNotFoundError as exc:
+        if exc.name in {"GPy", "emukit"}:
+            raise ImportError(
+                f"{name} requires the optional GP dependencies; "
+                'install them with `pip install -e ".[gp]`.'
+            ) from exc
+        raise
+    globals()[name] = value
+    return value
 
 __all__ = [
     "ActiveLearningLoop",
