@@ -192,8 +192,6 @@ encoder:                          # MLP encoder (Phase 2)
 cnp:                              # CNP (Phase 3)
   n_context_min: 16
   n_context_max: 64
-  output_activation: sigmoid
-  mixup_alpha: 0.1
 
 mfgp:                             # MFGP (Phase 4)
   kernel: rbf                     # 'rbf' or 'matern52'
@@ -231,8 +229,7 @@ mae_thresholds:                   # Phase 3 acceptance gate per scenario
 from schemas.config import EncoderConfig, CNPConfig, TrainingConfig
 
 enc_cfg = EncoderConfig(type="mlp", latent_dim=64, hidden_dims=[128, 128], dropout=0.0)
-cnp_cfg = CNPConfig(n_context_min=16, n_context_max=64,
-                    output_activation="sigmoid", mixup_alpha=0.1)
+cnp_cfg = CNPConfig(n_context_min=16, n_context_max=64)
 train_cfg = TrainingConfig(n_steps=1500, learning_rate=1.0e-3, batch_size=16,
                            n_events_per_trial=128, n_mc_samples=4, seed=0)
 ```
@@ -416,8 +413,7 @@ cnp = build_cnp(enc_cfg, dim_theta=sampler.dim_theta, dim_phi=sampler.dim_phi)
 
 history = train_cnp(
     cnp, sampler,
-    cnp_config=CNPConfig(n_context_min=32, n_context_max=96,
-                          output_activation="sigmoid", mixup_alpha=0.1),
+    cnp_config=CNPConfig(n_context_min=32, n_context_max=96),
     training_config=TrainingConfig(
         n_steps=1500, learning_rate=1e-3,
         batch_size=16, n_events_per_trial=128,
@@ -486,7 +482,7 @@ data = prepare_mfgp_datasets_from_batches(cnp, lf_batch, hf_batch,
                                            n_mc_samples=50, seed=0)
 
 # Fit the 3-fidelity MFGP (LF β̄, HF β̄, HF y_raw).
-mfgp = fit_mfgp_three_fidelity(data, kernel="rbf", n_restarts=5)
+mfgp = fit_mfgp_three_fidelity(data, config=cfg.mfgp, n_restarts=5)
 
 save_mfgp("results/mfgp.pkl", mfgp)        # pickle-backed
 ```

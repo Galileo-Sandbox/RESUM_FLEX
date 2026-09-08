@@ -39,6 +39,7 @@ from core.surrogate_cnp import (
 from core.surrogate_mfgp import MultiFidelityGP
 from core.training import cnp_trial_predictive
 from data.pseudo_generator import PseudoDataGenerator
+from schemas.config import MFGPConfig
 from schemas.data_models import InputMode, StandardBatch
 
 
@@ -201,7 +202,8 @@ def evaluate_mfgp_coverage_from_batch(
 def fit_mfgp_three_fidelity(
     data: dict[str, np.ndarray],
     *,
-    kernel: str = "rbf",
+    config: MFGPConfig | None = None,
+    kernel: str | None = None,
     n_restarts: int = 5,
     verbose: bool = False,
 ) -> MultiFidelityGP:
@@ -211,11 +213,14 @@ def fit_mfgp_three_fidelity(
     :func:`prepare_mfgp_datasets_from_batches` (or the synthetic-data
     wrapper :func:`prepare_mfgp_datasets`).
     """
+    if config is not None and kernel is not None:
+        raise ValueError("pass either config or kernel, not both")
+    selected_kernel = config.kernel if config is not None else (kernel or "rbf")
     dim_theta = data["X_hf"].shape[1]
     X_list = [data["X_lf"], data["X_hf"], data["X_hf"]]
     Y_list = [data["Y_lf_cnp"], data["Y_hf_cnp"], data["Y_hf_raw"]]
     return MultiFidelityGP(
-        n_fidelities=3, dim_theta=dim_theta, kernel=kernel,
+        n_fidelities=3, dim_theta=dim_theta, kernel=selected_kernel,
     ).fit(X_list, Y_list, n_restarts=n_restarts, verbose=verbose)
 
 

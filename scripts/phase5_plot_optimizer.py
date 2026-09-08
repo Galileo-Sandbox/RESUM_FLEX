@@ -79,7 +79,6 @@ def _enc_cfg() -> EncoderConfig:
 def _cnp_cfg() -> CNPConfig:
     return CNPConfig(
         n_context_min=32, n_context_max=96,
-        output_activation="sigmoid", mixup_alpha=0.1,
     )
 
 
