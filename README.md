@@ -371,33 +371,13 @@ class HasGenerate:
     def generate(self, n_trials: int, n_events: int, seed: int) -> StandardBatch: ...
 ```
 
-For synthetic data this is `PseudoDataGenerator`. For your own fixed
-dataset, write a small re-sampling adapter:
+For synthetic data this is `PseudoDataGenerator`. For an in-memory real
+dataset, use the supplied `FixedBatchSource` adapter:
 
 ```python
-import numpy as np
-from schemas.data_models import StandardBatch, InputMode
+from data import FixedBatchSource
 
-class BatchSampler:
-    """Resample sub-batches from a fixed StandardBatch for CNP training."""
-    def __init__(self, full: StandardBatch) -> None:
-        self.batch = full
-        self.mode = full.mode
-        self.dim_theta = full.theta.shape[1] if full.theta is not None else None
-        self.dim_phi   = full.phi.shape[2]   if full.phi   is not None else None
-
-    def generate(self, n_trials: int, n_events: int, seed: int) -> StandardBatch:
-        rng = np.random.default_rng(seed)
-        ti  = rng.choice(self.batch.batch_size, size=n_trials, replace=True)
-        ei  = rng.choice(self.batch.n_events,   size=n_events, replace=False)
-        return StandardBatch(
-            mode=self.batch.mode,
-            theta=self.batch.theta[ti] if self.batch.theta is not None else None,
-            phi=self.batch.phi[ti][:, ei] if self.batch.phi is not None else None,
-            labels=self.batch.labels[ti][:, ei],
-        )
-
-sampler = BatchSampler(full_lf_batch)   # built from your raw arrays in §1
+sampler = FixedBatchSource(full_lf_batch)
 ```
 
 Then:
