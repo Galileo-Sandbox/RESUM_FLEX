@@ -31,6 +31,26 @@ Three input modalities must be supported: `FULL (θ,φ,X)`, `EVENT_ONLY (φ,X)`,
   deferred features are not exposed as inert configuration fields.
 - `StandardBatch.theta` and `StandardBatch.phi` are `Optional`; presence is communicated via boolean masks.
 
+### Environment and dependency ownership
+- `pyproject.toml` is the sole Python dependency declaration; never copy its
+  package list into `pixi.toml`.
+- uv owns Python resolution and `uv.lock`. Its mutually exclusive `numpy1` and
+  `numpy2` groups validate the published `numpy>=1.24,<3` range in separate
+  `.venv-numpy1` and `.venv-numpy2` environments.
+- Pixi owns only the external `uv` executable, task orchestration, and
+  `pixi.lock`. Every Python-running Pixi task delegates to `uv --frozen`.
+- The development matrix pins CPU Torch 2.11.0 in both environments to isolate
+  NumPy-stack differences; published metadata remains `torch>=2.3` and
+  backend-neutral.
+- The supported Python window is 3.11–3.12 so both NumPy 1.26 and NumPy 2 can
+  be exercised. `gp` selects GPy 1.14.2+ for NumPy 2; the mutually exclusive
+  `gp-numpy1` extra preserves GPy 1.13.2 only for the legacy compatibility job.
+- The full NumPy 2 GP stack requires Python 3.11+, SciPy 1.13+, Matplotlib
+  3.9+, PyTorch 2.3+, GPy 1.14.2+, and Emukit 0.5.1+.
+- Pin NumPy 2 tests to one BLAS thread to prevent severe oversubscription on
+  small GP matrices. Pin the legacy NumPy 1 test to two threads to preserve its
+  established deterministic optimizer path.
+
 ### Input scaling (do not skip on real data)
 - The CNP encoder is a vanilla MLP; gradient imbalance makes it **scale-blind** when θ or φ components differ in magnitude by ≥ ~10×. The MFGP can compensate via ARD lengthscales, the CNP cannot.
 - Recommended workflow on real (non-uniform-sampled) data: normalize via `core.scaling.MinMaxScaler` (`from_bounds(low, high)` if known, `fit(X)` otherwise) **before** building the `StandardBatch`. Persist the scaler alongside CNP / MFGP checkpoints so predictions can be inverse-transformed back to physical units.
