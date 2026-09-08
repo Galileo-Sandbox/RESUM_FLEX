@@ -35,6 +35,9 @@ def test_pixi_delegates_python_resolution_to_uv() -> None:
     )
     assert tasks["test-numpy1"]["env"]["OPENBLAS_NUM_THREADS"] == "2"
     assert tasks["test-numpy2"]["env"]["OPENBLAS_NUM_THREADS"] == "1"
+    assert "--group notebook" in tasks["notebook"]["cmd"]
+    assert tasks["notebook"]["env"]["UV_PROJECT_ENVIRONMENT"] == ".venv-notebook"
+    assert tasks["notebook"]["env"]["OPENBLAS_NUM_THREADS"] == "1"
 
 
 def test_legacy_gp_extra_is_self_contained() -> None:
