@@ -63,8 +63,20 @@ def test_paper_reproduction_notebook_contains_executed_figures() -> None:
 
     assert all(cell["execution_count"] is not None for cell in executed)
     assert not any(output["output_type"] == "error" for output in outputs)
-    assert sum("image/png" in output.get("data", {}) for output in outputs) == 6
+    assert sum("image/png" in output.get("data", {}) for output in outputs) == 7
     assert "/tmp/" not in json.dumps(outputs)
+
+
+def test_no_cnp_comparison_uses_two_separate_code_cells() -> None:
+    """Keep the historical-style and current-framework refits visibly separate."""
+    code_sources = [
+        "".join(cell.get("source", []))
+        for cell in load_notebook()["cells"]
+        if cell["cell_type"] == "code"
+    ]
+
+    assert sum("historical_no_cnp_model" in source for source in code_sources) == 1
+    assert sum("current_no_cnp_model" in source for source in code_sources) == 1
 
 
 def test_bundled_aggregate_data_is_unchanged() -> None:
