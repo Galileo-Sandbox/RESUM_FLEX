@@ -79,6 +79,32 @@ def test_no_cnp_comparison_uses_two_separate_code_cells() -> None:
     assert sum("current_no_cnp_model" in source for source in code_sources) == 1
 
 
+def test_no_cnp_validation_preserves_trial_order() -> None:
+    """Figure 7 must retain validation-file order rather than sort predictions."""
+    cells = load_notebook()["cells"]
+    figure_7_start = next(
+        index
+        for index, cell in enumerate(cells)
+        if "## 7. Paper Figure 7" in "".join(cell.get("source", []))
+    )
+    figure_7_end = next(
+        index
+        for index, cell in enumerate(cells[figure_7_start + 1 :], figure_7_start + 1)
+        if "## 8. Reproduction boundary" in "".join(cell.get("source", []))
+    )
+    source = "\n".join(
+        "".join(cell.get("source", []))
+        for cell in cells[figure_7_start:figure_7_end]
+    )
+
+    assert "argsort" not in source
+    assert "sorted by posterior mean" not in source
+    assert "original CSV order" in source
+    assert source.count("include_likelihood=True") == 1
+    assert source.count("include_likelihood=False") == 1
+    assert "Future-observation band" in source
+
+
 def test_bundled_aggregate_data_is_unchanged() -> None:
     """Pin the exact portable aggregate inputs used by the replay."""
     expected = {
