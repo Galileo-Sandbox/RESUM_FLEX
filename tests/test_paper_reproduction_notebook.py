@@ -105,6 +105,29 @@ def test_no_cnp_validation_preserves_trial_order() -> None:
     assert "Future-observation band" in source
 
 
+def test_figure_5_validation_preserves_trial_order() -> None:
+    """Figure 5 must retain validation-file order rather than sort predictions."""
+    cells = load_notebook()["cells"]
+    figure_5_start = next(
+        index
+        for index, cell in enumerate(cells)
+        if "## 6. Paper Figure 5" in "".join(cell.get("source", []))
+    )
+    figure_7_start = next(
+        index
+        for index, cell in enumerate(cells[figure_5_start + 1 :], figure_5_start + 1)
+        if "## 7. Paper Figure 7" in "".join(cell.get("source", []))
+    )
+    source = "\n".join(
+        "".join(cell.get("source", []))
+        for cell in cells[figure_5_start:figure_7_start]
+    )
+
+    assert "argsort" not in source
+    assert "sorted by posterior mean" not in source
+    assert "original CSV order" in source
+
+
 def test_bundled_aggregate_data_is_unchanged() -> None:
     """Pin the exact portable aggregate inputs used by the replay."""
     expected = {
